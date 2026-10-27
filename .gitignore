@@ -1,0 +1,10 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/sidecar/node
+src-tauri/sidecar/node.exe
+src-tauri/sidecar/node_modules/
+src-tauri/resources/bin/*
+!src-tauri/resources/bin/.gitkeep
+*.log
+.DS_Store
