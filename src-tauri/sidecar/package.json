@@ -1,0 +1,10 @@
+{
+  "name": "yt-transcript-sidecar",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@desert-ant-labs/voz": "^4.2.0",
+    "onnxruntime-node": "^1.31.1"
+  }
+}
