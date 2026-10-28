@@ -14,7 +14,6 @@ import {
   toVtt,
   type Segment,
 } from "./lib/merge";
-import { diarize } from "./lib/who";
 import type {
   JobError,
   ProgressEvent,
@@ -143,18 +142,19 @@ export default function App() {
         }
 
         setPhase("who");
-        // Paint the speaker step before the WASM model load blocks the thread.
+        // Paint the speaker step before the audio fetch starts.
         await new Promise((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         );
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
         try {
+          const { diarize, warm } = await import("./lib/who");
+          warm();
           const response = await fetch(convertFileSrc(transcript.audioPath));
           if (!response.ok) {
             throw new Error(`The audio file could not be read (${response.status}).`);
           }
-          const blob = await response.blob();
-          const diarization = await diarize(blob, (name, fraction) => {
+          const audio = await response.arrayBuffer();
+          const diarization = await diarize(audio, (name, fraction) => {
             setWhoProgress({ phase: name, fraction });
           });
           setSegments(mergeWords(transcript.words, diarization.turns));
@@ -551,8 +551,8 @@ export default function App() {
               <div>
                 <h3>Speaker labeling</h3>
                 <p>
-                  Use Who to label who said what. Adds a 32 MB model on first use,
-                  and the window can freeze while it runs.
+                  Use Who to label who said what. Adds a 32 MB model on first use;
+                  it runs in a background worker, so the window stays responsive.
                 </p>
               </div>
               <button

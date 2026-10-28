@@ -40,7 +40,7 @@ Node sidecar: Voz (onnxruntime-node)
 
 Who runs in the webview through its browser WASM build, so diarization works on every platform without a native module. The Node sidecar is only needed for Voz, whose SDK has no Rust or Python equivalent.
 
-Who's browser runtime cannot run in a Web Worker here: its LiteRT loader calls `importScripts`, which WebKit exposes in module workers but rejects. It runs on the UI thread instead. On long recordings the window can freeze for a few seconds while Who works.
+Who runs in a background worker, loaded on demand: the first diarization pays its 44 MB WASM load and compile, but startup and the rest of the UI never wait for it. The WAV is parsed to samples in that worker, which skips Web Audio's 44.1 kHz decode and keeps the window responsive on long recordings.
 
 ## Requirements
 

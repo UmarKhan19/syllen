@@ -8,7 +8,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
   optimizeDeps: { include: ["@desert-ant-labs/who", "@litertjs/core"] },
-  build: { target: "esnext" },
+  build: {
+    target: "esnext",
+  },
+  // The Who worker is loaded from a classic worker stub so LiteRT can use
+  // importScripts; its bundle must stay ESM because Who has top-level await.
+  worker: { format: "es" },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
