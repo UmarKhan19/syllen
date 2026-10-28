@@ -8,3 +8,4 @@ src-tauri/resources/bin/*
 !src-tauri/resources/bin/.gitkeep
 *.log
 .DS_Store
+.codegraph/
