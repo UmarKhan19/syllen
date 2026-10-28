@@ -1,0 +1,70 @@
+{
+  "$schema": "https://impeccable.style/schema/design.json",
+  "world": "script-room",
+  "thesis": "A transcript is a document, so the app is a document surface: one ground of paper, black ink, ruled margins, and colour reserved for the people speaking. It refuses the category arrangement of a dark utility dashboard whose chrome competes with its output.",
+  "platform": "web",
+  "grounds": {
+    "paper": "#f1f1ee",
+    "sheet": "#fafaf8",
+    "wash": "#f6f6f2"
+  },
+  "ink": {
+    "ink": "#14161a",
+    "ink-2": "#4a4f57",
+    "ink-3": "#676c74",
+    "speech": "#1c1f25"
+  },
+  "rules": {
+    "rule": "#dedcd7",
+    "rule-soft": "#e8e6e1"
+  },
+  "pens": {
+    "pen-1": "#2f4d8c",
+    "pen-2": "#99401f",
+    "pen-3": "#1c6153",
+    "pen-4": "#6a3467"
+  },
+  "status": {
+    "alert": "#9c2f21",
+    "alert-wash": "#f7ecea",
+    "ok": "#2a6540"
+  },
+  "type": {
+    "ui": "Schibsted Grotesk",
+    "text": "Source Serif 4",
+    "mono": "Spline Sans Mono"
+  },
+  "fonts": {
+    "self-hosted": true,
+    "subset": "latin",
+    "license": "SIL Open Font License 1.1",
+    "path": "public/fonts/",
+    "licence-files": [
+      "public/fonts/schibstedgrotesk-OFL.txt",
+      "public/fonts/sourceserif4-OFL.txt",
+      "public/fonts/splinesansmono-OFL.txt"
+    ]
+  },
+  "scale": {
+    "window-bar": "58px",
+    "display": "34px",
+    "field": "54px",
+    "body": "15px",
+    "transcript": "17px",
+    "meta": "12.5px",
+    "smallprint": "12px"
+  },
+  "geometry": {
+    "radius": "12px",
+    "radius-sm": "9px",
+    "transcript-columns": ["58px", "96px", "minmax(0, 1fr)"],
+    "speech-stand-off": "20px",
+    "speech-measure": "68ch"
+  },
+  "motion": [
+    "drawer slide-in",
+    "progress rail fill"
+  ],
+  "colour-discipline": "meaning only: four speaker pens, green privacy pip, red failure; no decorative accent",
+  "replaced": "dark-slate (#0c0e12) / amber (#e6a23c) dashboard world"
+}

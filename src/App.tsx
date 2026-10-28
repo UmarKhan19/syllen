@@ -39,6 +39,13 @@ const STEPS = [
   { label: "Speakers", stages: ["who"] },
 ];
 
+const HOW = [
+  { label: "Download", text: "yt-dlp fetches the audio track." },
+  { label: "Prepare", text: "ffmpeg rewrites it as 16 kHz mono." },
+  { label: "Transcribe", text: "Voz turns the audio into timed words." },
+  { label: "Speakers", text: "Who works out who said what." },
+];
+
 function stepIndex(stage: string | null): number {
   if (!stage) return -1;
   return STEPS.findIndex((step) => step.stages.includes(stage));
@@ -76,6 +83,7 @@ export default function App() {
   const [speakerCount, setSpeakerCount] = useState<number | null>(null);
   const [whoError, setWhoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tools, setTools] = useState<ToolsStatus | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -96,6 +104,7 @@ export default function App() {
   const speakerLabelsRef = useRef(speakerLabels);
   const gearRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     speakerLabelsRef.current = speakerLabels;
@@ -289,7 +298,13 @@ export default function App() {
   async function start(event: FormEvent) {
     event.preventDefault();
     const value = url.trim();
-    if (!value || busy) return;
+    if (busy) return;
+    if (!value) {
+      setPrompt("Paste a YouTube link to transcribe.");
+      urlRef.current?.focus();
+      return;
+    }
+    setPrompt(null);
     setError(null);
     setResult(null);
     setSegments([]);
@@ -383,145 +398,242 @@ export default function App() {
     }
   }
 
+  const idle = phase === "idle" && !result;
+
   return (
     <div className="app">
-      <header className="masthead">
-        <div>
-          <p className="eyebrow">Local transcription</p>
-          <h1>YT Transcript</h1>
-        </div>
-        <div className="mastheadRight">
-          <p className="tagline">
-            Paste a video link. Get a transcript with speaker labels, without
-            sending the audio anywhere.
-          </p>
-          <button
-            ref={gearRef}
-            type="button"
-            className="iconButton"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Settings"
-            title="Settings"
-          >
-            <GearIcon />
-          </button>
+      <header className="topbar">
+        <div className="topbarInner">
+          <div className="wordmark">
+            <MarkIcon />
+            <span className="name">YT Transcript</span>
+          </div>
+          <div className="topbarRight">
+            <span className="privacyNote">
+              <span className="pip" />
+              Audio never leaves this machine
+            </span>
+            <button
+              ref={gearRef}
+              type="button"
+              className="iconButton"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              title="Settings"
+            >
+              <GearIcon />
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="composer">
-        <form onSubmit={start} className="urlForm">
-          <input
-            type="url"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://www.youtube.com/watch?v=..."
-            disabled={busy}
-            aria-label="Video URL"
-            spellCheck={false}
-          />
-          {phase === "running" ? (
-            <button type="button" className="ghost" onClick={cancel}>
-              Cancel
-            </button>
-          ) : (
-            <button type="submit" disabled={busy || !url.trim()}>
-              {phase === "who" ? "Working…" : "Transcribe"}
-            </button>
-          )}
-        </form>
-        <p className="hint">
-          English only for now. The first run downloads a 350 MB speech model
-          (plus a 32 MB speaker model if labeling is on). Audio is deleted when
-          the app closes.
-        </p>
-        {missing.length > 0 && (
-          <div className="banner">
-            <strong>Missing tools:</strong> {missing.join(", ")}. The app looks
-            in its app-data folder and <code>src-tauri/resources/bin</code>, then
-            in your PATH. yt-dlp can also be installed from Settings.
-          </div>
+      <main className="shell main">
+        {idle && (
+          <section className="intro">
+            <h1 className="display">Transcribe a video.</h1>
+            <p className="lede">
+              Word-level timestamps and speaker labels, ready to copy or export.
+            </p>
+          </section>
         )}
-      </section>
 
-      {phase !== "idle" && phase !== "error" && (
-        <section className="pipeline">
-          <div className="steps">
-            {steps.map((step, index) => {
-              const state =
-                index < currentStep ? "done" : index === currentStep ? "active" : "todo";
-              return (
-                <div key={step.label} className={`step ${state}`}>
-                  <span className="dot">{index < currentStep ? "✓" : index + 1}</span>
-                  <span>{step.label}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="now">
-            <span aria-live="polite">
-              {phase === "who" ? whoLabel : stageLabel(progress?.stage ?? null)}
-            </span>
-            {showPercent && (
-              <span className="pct">{Math.round((shownPercent ?? 0) * 100)}%</span>
+        <section className={`composer${idle ? "" : " compact"}`}>
+          <form onSubmit={start} className="urlForm">
+            <div className="field">
+              <span className="fieldIcon">
+                <LinkIcon />
+              </span>
+              <input
+                ref={urlRef}
+                type="url"
+                value={url}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  if (prompt) setPrompt(null);
+                }}
+                placeholder="https://www.youtube.com/watch?v=..."
+                disabled={busy}
+                aria-label="Video URL"
+                spellCheck={false}
+              />
+            </div>
+            {phase === "running" ? (
+              <button type="button" className="ghost" onClick={cancel}>
+                Cancel
+              </button>
+            ) : phase === "who" ? (
+              <button type="button" className="ghost" disabled>
+                Working…
+              </button>
+            ) : (
+              <button type="submit" className="btn">
+                Transcribe
+              </button>
             )}
-          </div>
-          <div className={`bar ${showPercent ? "" : "indeterminate"}`}>
-            <span
-              style={
-                showPercent
-                  ? { transform: `scaleX(${shownPercent ?? 0})` }
-                  : undefined
-              }
-            />
-          </div>
-        </section>
-      )}
-
-      {error && (
-        <section className="error" role="alert">
-          <strong>Something went wrong</strong>
-          <pre>{error}</pre>
-        </section>
-      )}
-
-      {result && (
-        <article className="result">
-          <div className="resultHead">
-            <div>
-              <h2>{result.title}</h2>
-              <p className="meta">
-                {formatClock(result.duration ?? 0)}
-                {speakerCount !== null && ` · ${speakerCount} speakers`}
-                {` · ${result.words.length} words`}
-              </p>
-            </div>
-            <div className="actions">
-              <button type="button" className="ghost" onClick={copyTranscript}>
-                Copy
-              </button>
-              <button type="button" className="ghost" onClick={() => exportAs("srt")}>
-                SRT
-              </button>
-              <button type="button" className="ghost" onClick={() => exportAs("vtt")}>
-                VTT
-              </button>
-              <button type="button" className="ghost" onClick={() => exportAs("txt")}>
-                TXT
-              </button>
-            </div>
-          </div>
-
-          {whoError && (
-            <div className="banner">
-              <strong>Speaker labels unavailable.</strong> {whoError}
+          </form>
+          {prompt && (
+            <p className="prompt" role="status">
+              {prompt}
+            </p>
+          )}
+          {!prompt && idle && (
+            <p className="hint">
+              English only. The first run downloads a 350 MB speech model, plus a
+              32 MB speaker model when labelling is on. Audio is deleted on
+              exit.
+            </p>
+          )}
+          {missing.length > 0 && (
+            <div className="callout">
+              <InfoIcon />
+              <span>
+                <strong>Missing tools:</strong> {missing.join(", ")}. The app
+                looks in its app-data folder and{" "}
+                <code>src-tauri/resources/bin</code>, then in your PATH. yt-dlp
+                can also be installed from Settings.
+              </span>
             </div>
           )}
+        </section>
 
-          <Transcript segments={segments} fallback={result.text} />
-        </article>
-      )}
+        {(phase === "running" || phase === "who") && (
+          <section className="pipeline">
+            <div className="stages">
+              {steps.map((step, index) => {
+                const state =
+                  index < currentStep ? "done" : index === currentStep ? "active" : "todo";
+                return (
+                  <div
+                    key={step.label}
+                    className={`stage ${state}`}
+                    aria-current={state === "active" ? "step" : undefined}
+                  >
+                    <span className="marker">
+                      {state === "done" ? <CheckIcon /> : null}
+                    </span>
+                    <span>{step.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="now">
+              <span aria-live="polite">
+                {phase === "who" ? whoLabel : stageLabel(progress?.stage ?? null)}
+              </span>
+              {showPercent && (
+                <span className="pct">{Math.round((shownPercent ?? 0) * 100)}%</span>
+              )}
+            </div>
+            <div className={`rail ${showPercent ? "" : "indeterminate"}`}>
+              <span
+                style={
+                  showPercent
+                    ? { transform: `scaleX(${shownPercent ?? 0})` }
+                    : undefined
+                }
+              />
+            </div>
+          </section>
+        )}
 
-      <footer className="footer">
+        {error && (
+          <section className="callout alert" role="alert">
+            <AlertIcon />
+            <span>
+              <strong>Something went wrong</strong>
+              <span className="errorText">{error}</span>
+              <span className="errorHelp">
+                Check the link and try again. If yt-dlp is missing, install it
+                from Settings.
+              </span>
+            </span>
+          </section>
+        )}
+
+        {result && (
+          <article className="result">
+            <div className="resultHead">
+              <div>
+                <h2>{result.title}</h2>
+                <p className="meta">
+                  {formatClock(result.duration ?? 0)}
+                  {speakerCount !== null && (
+                    <>
+                      <span className="sep">·</span>
+                      {speakerCount} speakers
+                    </>
+                  )}
+                  <span className="sep">·</span>
+                  {result.words.length} words
+                </p>
+              </div>
+              <div className="toolbar">
+                <button type="button" onClick={copyTranscript}>
+                  Copy
+                </button>
+                <button type="button" onClick={() => exportAs("srt")}>
+                  SRT
+                </button>
+                <button type="button" onClick={() => exportAs("vtt")}>
+                  VTT
+                </button>
+                <button type="button" onClick={() => exportAs("txt")}>
+                  TXT
+                </button>
+              </div>
+            </div>
+
+            {whoError && (
+              <div className="callout">
+                <AlertIcon />
+                <span>
+                  <strong>Speaker labels unavailable.</strong> {whoError}
+                </span>
+              </div>
+            )}
+
+            <Transcript segments={segments} fallback={result.text} />
+          </article>
+        )}
+
+        {idle && (
+          <section className="how">
+            <ol className="howGrid">
+              {HOW.map((step) => (
+                <li className="howStep" key={step.label}>
+                  <span className="howLabel">{step.label}</span>
+                  <span className="howText">{step.text}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {idle && (
+          <section className="specimen">
+            <p className="specimenCap">Example output</p>
+            <div className="specimenRows">
+              <div className="specimenRow">
+                <span className="time">0:00</span>
+                <span className="who sp0">Speaker 1</span>
+                <p>Good evening, and welcome to the show.</p>
+              </div>
+              <div className="specimenRow">
+                <span className="time">0:05</span>
+                <span className="who sp1">Speaker 2</span>
+                <p>Thanks for having me. Where should we start?</p>
+              </div>
+              <div className="specimenRow">
+                <span className="time">0:12</span>
+                <span className="who sp0">Speaker 1</span>
+                <p>Let us start with the question you came to ask.</p>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="shell footer">
         <span>
           Powered by Desert Ant Labs <strong>Voz</strong> and <strong>Who</strong>.
         </span>
@@ -585,20 +697,27 @@ export default function App() {
                       ? `Version ${tools.ytDlpVersion ?? "unknown"}`
                       : "Not installed"}
                 </span>
-                {upToDate && <span className="badge ok">Up to date</span>}
+                {upToDate && (
+                  <span className="chip ok">
+                    <span className="pip" />
+                    Up to date
+                  </span>
+                )}
                 {hasUpdate && (
-                  <span className="badge outdated">
+                  <span className="chip strong">
+                    <span className="pip" />
                     Update available · {latestYtDlp}
                   </span>
                 )}
                 {!upToDate && !hasUpdate && checkingLatest && (
-                  <span className="badge neutral">Checking…</span>
+                  <span className="chip">Checking…</span>
                 )}
                 {!upToDate && !hasUpdate && !checkingLatest && latestError && (
-                  <span className="badge neutral" title={latestError}>
+                  <span className="chip" title={latestError}>
                     Check failed
                   </span>
                 )}
+
               </div>
               <button
                 type="button"
@@ -625,7 +744,9 @@ export default function App() {
                 Finish the current transcription to change these settings.
               </p>
             )}
-            <p className="fine">Settings apply to the next transcription.</p>
+            <div className="drawerFoot">
+              <p className="fine">Settings apply to the next transcription.</p>
+            </div>
           </aside>
         </div>
       )}
@@ -642,31 +763,136 @@ const Transcript = memo(function Transcript({
   segments: Segment[];
   fallback: string;
 }) {
-  return (
-    <div className="transcript">
-      {segments.length === 0 ? (
+  if (segments.length === 0) {
+    return (
+      <div className="transcript">
         <p className="plain">{fallback}</p>
-      ) : (
-        segments.map((segment, index) => (
-          <div className="segment" key={`${segment.start}-${index}`}>
-            <div className="side">
-              <span className="time">{formatClock(segment.start)}</span>
-              {segment.speaker !== null && (
-                <span className={`speaker ${speakerClass(segment.speaker)}`}>
-                  {speakerLabel(segment.speaker)}
-                </span>
-              )}
+      </div>
+    );
+  }
+  const labelled = segments.some((segment) => segment.speaker !== null);
+  return (
+    <div className={`transcript${labelled ? "" : " unlabelled"}`}>
+      {segments.map((segment, index) => {
+        const startsTurn =
+          index === 0 || segment.speaker !== segments[index - 1].speaker;
+        return (
+          <div
+            className={`para ${startsTurn ? "turn-start" : "turn-continue"}`}
+            key={`${segment.start}-${index}`}
+          >
+            <span className="time">{formatClock(segment.start)}</span>
+            <span className={`who ${speakerClass(segment.speaker)}`}>
+              {startsTurn && segment.speaker !== null
+                ? speakerLabel(segment.speaker)
+                : null}
+            </span>
+            <div className="speech">
+              <p>{segment.text}</p>
             </div>
-            <p>{segment.text}</p>
           </div>
-        ))
-      )}
+        );
+      })}
     </div>
   );
 });
 
 function speakerClass(speaker: number | null): string {
   return speaker === null ? "unknown" : `sp${speaker % 4}`;
+}
+
+function MarkIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.15"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <rect x="2.75" y="2.75" width="12.5" height="12.5" rx="2.25" />
+      <path d="M5.75 6.75h6.5M5.75 9.25h6.5M5.75 11.75h3.5" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M10.5 13.5a4.5 4.5 0 0 0 6.36 0l2.83-2.83a4.5 4.5 0 0 0-6.36-6.36l-1.3 1.3" />
+      <path d="M13.5 10.5a4.5 4.5 0 0 0-6.36 0l-2.83 2.83a4.5 4.5 0 0 0 6.36 6.36l1.3-1.3" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m2.5 6.4 2.3 2.3 4.7-5.4" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 4 2.9 20h18.2L12 4Z" />
+      <path d="M12 10v4.2" />
+      <path d="M12 17.2h.01" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.75" />
+      <path d="M12 11.2V16" />
+      <path d="M12 7.9h.01" />
+    </svg>
+  );
 }
 
 function GearIcon() {

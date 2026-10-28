@@ -112,6 +112,16 @@ Downloaded audio lives in the app cache (`app_cache_dir/jobs`) and is removed on
 
 Downloading videos from YouTube may violate its terms of service. Use this for content you have the right to process.
 
+## Design
+
+The interface is a document surface: one paper ground, black ink, hairline
+rules, and colour reserved for the speaker labels. The chrome is set in
+[Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk), the
+transcript in [Source Serif 4](https://fonts.google.com/specimen/Source+Serif+4),
+and the timecodes in [Spline Sans Mono](https://fonts.google.com/specimen/Spline+Sans+Mono).
+All three are self-hosted in `public/fonts/` under the SIL Open Font License
+1.1, and the licence texts ship beside the font files.
+
 ## Development
 
 ```bash
