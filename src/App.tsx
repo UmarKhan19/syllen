@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
@@ -109,9 +116,27 @@ export default function App() {
       });
     };
 
+    let progressFrame = 0;
+    let pendingProgress: ProgressEvent | null = null;
+    const publishProgress = (next: ProgressEvent) => {
+      pendingProgress = next;
+      if (progressFrame) return;
+      progressFrame = requestAnimationFrame(() => {
+        progressFrame = 0;
+        const value = pendingProgress;
+        pendingProgress = null;
+        if (!value) return;
+        setProgress((current) =>
+          current?.stage === value.stage && current.percent === value.percent
+            ? current
+            : value,
+        );
+      });
+    };
+
     track(
       listen<ProgressEvent>("job:progress", (event) => {
-        setProgress(event.payload);
+        publishProgress(event.payload);
       }),
     );
     track(
@@ -177,6 +202,7 @@ export default function App() {
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(progressFrame);
       unlisten.forEach((fn) => fn());
     };
   }, []);
@@ -357,11 +383,6 @@ export default function App() {
     }
   }
 
-  const transcriptText =
-    segments.length > 0
-      ? segments.map((segment) => segment.text).join(" ")
-      : (result?.text ?? "");
-
   return (
     <div className="app">
       <header className="masthead">
@@ -423,7 +444,7 @@ export default function App() {
       </section>
 
       {phase !== "idle" && phase !== "error" && (
-        <section className="pipeline" aria-live="polite">
+        <section className="pipeline">
           <div className="steps">
             {steps.map((step, index) => {
               const state =
@@ -437,7 +458,7 @@ export default function App() {
             })}
           </div>
           <div className="now">
-            <span>
+            <span aria-live="polite">
               {phase === "who" ? whoLabel : stageLabel(progress?.stage ?? null)}
             </span>
             {showPercent && (
@@ -446,7 +467,11 @@ export default function App() {
           </div>
           <div className={`bar ${showPercent ? "" : "indeterminate"}`}>
             <span
-              style={showPercent ? { width: `${(shownPercent ?? 0) * 100}%` } : undefined}
+              style={
+                showPercent
+                  ? { transform: `scaleX(${shownPercent ?? 0})` }
+                  : undefined
+              }
             />
           </div>
         </section>
@@ -492,25 +517,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="transcript">
-            {segments.length === 0 ? (
-              <p className="plain">{transcriptText}</p>
-            ) : (
-              segments.map((segment, index) => (
-                <div className="segment" key={`${segment.start}-${index}`}>
-                  <div className="side">
-                    <span className="time">{formatClock(segment.start)}</span>
-                    {segment.speaker !== null && (
-                      <span className={`speaker ${speakerClass(segment.speaker)}`}>
-                        {speakerLabel(segment.speaker)}
-                      </span>
-                    )}
-                  </div>
-                  <p>{segment.text}</p>
-                </div>
-              ))
-            )}
-          </div>
+          <Transcript segments={segments} fallback={result.text} />
         </article>
       )}
 
@@ -627,6 +634,36 @@ export default function App() {
     </div>
   );
 }
+
+const Transcript = memo(function Transcript({
+  segments,
+  fallback,
+}: {
+  segments: Segment[];
+  fallback: string;
+}) {
+  return (
+    <div className="transcript">
+      {segments.length === 0 ? (
+        <p className="plain">{fallback}</p>
+      ) : (
+        segments.map((segment, index) => (
+          <div className="segment" key={`${segment.start}-${index}`}>
+            <div className="side">
+              <span className="time">{formatClock(segment.start)}</span>
+              {segment.speaker !== null && (
+                <span className={`speaker ${speakerClass(segment.speaker)}`}>
+                  {speakerLabel(segment.speaker)}
+                </span>
+              )}
+            </div>
+            <p>{segment.text}</p>
+          </div>
+        ))
+      )}
+    </div>
+  );
+});
 
 function speakerClass(speaker: number | null): string {
   return speaker === null ? "unknown" : `sp${speaker % 4}`;

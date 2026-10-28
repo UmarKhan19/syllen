@@ -363,7 +363,7 @@ fn yt_dlp_asset() -> Option<&'static str> {
 }
 
 #[tauri::command]
-fn check_tools(app: AppHandle) -> ToolsStatus {
+async fn check_tools(app: AppHandle) -> ToolsStatus {
     let tools = resolve_tools(&app);
     let works = |program: &Path, args: &[&str]| {
         Command::new(program)
