@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -81,6 +82,7 @@ export default function App() {
   const [result, setResult] = useState<TranscriptResult | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [speakerCount, setSpeakerCount] = useState<number | null>(null);
+  const [speakerNames, setSpeakerNames] = useState<Record<number, string>>({});
   const [whoError, setWhoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -105,6 +107,10 @@ export default function App() {
   const gearRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+
+  const renameSpeaker = useCallback((speaker: number, name: string) => {
+    setSpeakerNames((current) => ({ ...current, [speaker]: name }));
+  }, []);
 
   useEffect(() => {
     speakerLabelsRef.current = speakerLabels;
@@ -308,6 +314,7 @@ export default function App() {
     setError(null);
     setResult(null);
     setSegments([]);
+    setSpeakerNames({});
     setSpeakerCount(null);
     setWhoError(null);
     setWhoProgress(null);
@@ -332,11 +339,12 @@ export default function App() {
 
   async function copyTranscript() {
     if (!result) return;
+    const text = segments.length ? toTxt(segments, speakerNames) : result.text;
     try {
-      await navigator.clipboard.writeText(result.text);
+      await navigator.clipboard.writeText(text);
     } catch {
       const area = document.createElement("textarea");
-      area.value = result.text;
+      area.value = text;
       area.style.position = "fixed";
       area.style.opacity = "0";
       document.body.appendChild(area);
@@ -355,10 +363,10 @@ export default function App() {
       const cues = buildCues(exportSegments);
       const contents =
         kind === "srt"
-          ? toSrt(cues)
+          ? toSrt(cues, speakerNames)
           : kind === "vtt"
-            ? toVtt(cues)
-            : toTxt(exportSegments);
+            ? toVtt(cues, speakerNames)
+            : toTxt(exportSegments, speakerNames);
       const name = `${slugify(result.title)}.${kind}`;
       let defaultPath = name;
       try {
@@ -592,7 +600,12 @@ export default function App() {
               </div>
             )}
 
-            <Transcript segments={segments} fallback={result.text} />
+            <Transcript
+              segments={segments}
+              fallback={result.text}
+              speakerNames={speakerNames}
+              onRename={renameSpeaker}
+            />
           </article>
         )}
 
@@ -759,10 +772,55 @@ export default function App() {
 const Transcript = memo(function Transcript({
   segments,
   fallback,
+  speakerNames,
+  onRename,
 }: {
   segments: Segment[];
   fallback: string;
+  speakerNames: Record<number, string>;
+  onRename: (speaker: number, name: string) => void;
 }) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const returnFocusIndexRef = useRef<number | null>(null);
+  const speakerCounts = useMemo(
+    () =>
+      segments.reduce<Record<number, number>>((counts, segment) => {
+        if (segment.speaker !== null) {
+          counts[segment.speaker] = (counts[segment.speaker] ?? 0) + 1;
+        }
+        return counts;
+      }, {}),
+    [segments],
+  );
+
+  useEffect(() => {
+    if (editingIndex !== null) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    } else if (returnFocusIndexRef.current !== null) {
+      const index = returnFocusIndexRef.current;
+      returnFocusIndexRef.current = null;
+      document
+        .querySelector<HTMLButtonElement>(`[data-segment-index="${index}"]`)
+        ?.focus();
+    }
+  }, [editingIndex]);
+
+  function closeEditor() {
+    setEditingIndex(null);
+  }
+
+  function saveName(event: FormEvent) {
+    event.preventDefault();
+    const segment = editingIndex === null ? undefined : segments[editingIndex];
+    const name = draftName.trim();
+    if (segment?.speaker === null || segment === undefined || !name) return;
+    onRename(segment.speaker, name);
+    closeEditor();
+  }
+
   if (segments.length === 0) {
     return (
       <div className="transcript">
@@ -776,17 +834,75 @@ const Transcript = memo(function Transcript({
       {segments.map((segment, index) => {
         const startsTurn =
           index === 0 || segment.speaker !== segments[index - 1].speaker;
+        const speaker = segment.speaker;
+        const label = speakerLabel(speaker, speakerNames);
+        const editing = editingIndex === index && speaker !== null;
         return (
           <div
-            className={`para ${startsTurn ? "turn-start" : "turn-continue"}`}
+            className={`para ${startsTurn ? "turn-start" : "turn-continue"}${editing ? " speaker-editing" : ""}`}
             key={`${segment.start}-${index}`}
           >
             <span className="time">{formatClock(segment.start)}</span>
-            <span className={`who ${speakerClass(segment.speaker)}`}>
-              {startsTurn && segment.speaker !== null
-                ? speakerLabel(segment.speaker)
-                : null}
-            </span>
+            {startsTurn && speaker !== null ? (
+              editing ? (
+                <form
+                  className="speakerEdit"
+                  onSubmit={saveName}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closeEditor();
+                    }
+                  }}
+                >
+                  <div className="speakerEditRow">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      aria-label={`Name for ${label}`}
+                      maxLength={48}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="submit"
+                      className="ghost speakerEditSave"
+                      disabled={!draftName.trim()}
+                    >
+                      Save
+                    </button>
+                    <button type="button" className="ghost" onClick={closeEditor}>
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="speakerEditHint">
+                    Changes all {speakerCounts[speaker] ?? 0} transcript{" "}
+                    {(speakerCounts[speaker] ?? 0) === 1 ? "passage" : "passages"} and
+                    export labels.
+                  </p>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  className={`who ${speakerClass(speaker)} speakerName`}
+                  onClick={() => {
+                    returnFocusIndexRef.current = index;
+                    setDraftName(label);
+                    setEditingIndex(index);
+                  }}
+                  data-segment-index={index}
+                  aria-label={`Rename ${label}`}
+                  title={`Rename ${label}`}
+                >
+                  <span>{label}</span>
+                  <PencilIcon />
+                </button>
+              )
+            ) : (
+              <span className={`who ${speakerClass(speaker)}`} />
+            )}
             <div className="speech">
               <p>{segment.text}</p>
             </div>
@@ -796,6 +912,24 @@ const Transcript = memo(function Transcript({
     </div>
   );
 });
+
+function PencilIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m10.9 2.2 2.9 2.9M2.4 13.6l2.8-.6 8-8a1.3 1.3 0 0 0-1.8-1.8l-8 8-.6 2.4Z" />
+    </svg>
+  );
+}
 
 function speakerClass(speaker: number | null): string {
   return speaker === null ? "unknown" : `sp${speaker % 4}`;

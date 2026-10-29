@@ -6,6 +6,7 @@ import {
   speakerAt,
   toSrt,
   toTxt,
+  toVtt,
   type Turn,
   type Word,
 } from "./merge";
@@ -106,6 +107,20 @@ describe("captions", () => {
   it("writes a readable text export", () => {
     const segments = mergeWords(words, turns);
     expect(toTxt(segments)).toContain("[0:00] Speaker 1: Hello there.");
+  });
+
+  it("uses renamed speakers in every export and escapes VTT voice names", () => {
+    const segments = mergeWords(words, turns);
+    const cues = buildCues(segments);
+    const speakerNames = { 0: "Eric & <guest>" };
+
+    expect(toTxt(segments, speakerNames)).toContain(
+      "[0:00] Eric & <guest>: Hello there.",
+    );
+    expect(toSrt(cues, speakerNames)).toContain("[Eric & <guest>]");
+    expect(toVtt(cues, speakerNames)).toContain(
+      "<v Eric &amp; &lt;guest&gt;>Hello there.",
+    );
   });
 
   it("omits speaker prefixes when labeling is off", () => {

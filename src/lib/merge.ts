@@ -25,8 +25,15 @@ export interface Cue {
   text: string;
 }
 
-export const speakerLabel = (speaker: number | null) =>
-  speaker === null ? "Unknown speaker" : `Speaker ${speaker + 1}`;
+export type SpeakerNames = Partial<Record<number, string>>;
+
+export const speakerLabel = (
+  speaker: number | null,
+  speakerNames: SpeakerNames = {},
+) =>
+  speaker === null
+    ? "Unknown speaker"
+    : speakerNames[speaker]?.trim() || `Speaker ${speaker + 1}`;
 
 const PUNCTUATION_ONLY = /^[.,!?;:…)»"']+$/;
 
@@ -167,34 +174,40 @@ export function formatClock(seconds: number): string {
     : `${minutes}:${pad(secs)}`;
 }
 
-export function toSrt(cues: Cue[]): string {
+export function toSrt(cues: Cue[], speakerNames: SpeakerNames = {}): string {
   return cues
     .map((cue, index) => {
       const time = `${formatTimestamp(cue.start, ",")} --> ${formatTimestamp(cue.end, ",")}`;
-      const prefix = cue.speaker === null ? "" : `[${speakerLabel(cue.speaker)}] `;
+      const prefix =
+        cue.speaker === null ? "" : `[${speakerLabel(cue.speaker, speakerNames)}] `;
       return `${index + 1}\n${time}\n${prefix}${cue.text}\n`;
     })
     .join("\n");
 }
 
-export function toVtt(cues: Cue[]): string {
+export function toVtt(cues: Cue[], speakerNames: SpeakerNames = {}): string {
   const body = cues
     .map((cue) => {
       const line =
         cue.speaker === null
           ? cue.text
-          : `<v ${speakerLabel(cue.speaker)}>${cue.text}`;
+          : `<v ${speakerLabel(cue.speaker, speakerNames)
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")}>${cue.text}`;
       return `${formatTimestamp(cue.start)} --> ${formatTimestamp(cue.end)}\n${line}\n`;
     })
     .join("\n");
   return `WEBVTT\n\n${body}`;
 }
 
-export function toTxt(segments: Segment[]): string {
+export function toTxt(segments: Segment[], speakerNames: SpeakerNames = {}): string {
   return segments
     .map((segment) => {
       const prefix =
-        segment.speaker === null ? "" : `${speakerLabel(segment.speaker)}: `;
+        segment.speaker === null
+          ? ""
+          : `${speakerLabel(segment.speaker, speakerNames)}: `;
       return `[${formatClock(segment.start)}] ${prefix}${segment.text}`;
     })
     .join("\n\n");

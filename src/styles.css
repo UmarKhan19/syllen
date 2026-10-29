@@ -686,6 +686,104 @@ input {
   color: var(--pen-4);
 }
 
+.speakerName {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 28px;
+  padding-right: 4px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.speakerName span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.speakerName svg {
+  flex: 0 0 12px;
+  opacity: 0.55;
+}
+
+.speakerName:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.speakerName:hover svg,
+.speakerName:focus-visible svg {
+  opacity: 1;
+}
+
+.speaker-editing .speakerEdit {
+  position: relative;
+  z-index: 1;
+  grid-column: 2 / -1;
+  padding: 5px 0 8px;
+  background: var(--paper);
+}
+
+.speakerEditRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.speakerEditRow input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--sheet);
+  font-size: 13px;
+}
+
+.speakerEditRow input:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(20, 22, 26, 0.12);
+}
+
+.speakerEditRow .ghost {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.speakerEditRow .speakerEditSave {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.speakerEditRow .speakerEditSave:hover:not(:disabled) {
+  border-color: #05060a;
+  background: #05060a;
+  color: var(--paper);
+}
+
+.speakerEditHint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.speaker-editing .speech {
+  grid-column: 2 / -1;
+  margin-top: 10px;
+  padding-left: 0;
+}
+
 .para.turn-continue .who::before {
   content: "";
   display: block;
@@ -1125,11 +1223,28 @@ input {
     text-align: left;
   }
 
+  .speakerName {
+    padding-top: 0;
+    padding-right: 12px;
+  }
+
+  .speaker-editing .speakerEdit {
+    padding: 8px 0;
+  }
+
+  .speakerEditRow {
+    max-width: 100%;
+  }
+
   .para .speech,
   .specimenRow p {
     display: block;
     margin-top: 6px;
     padding-left: 0;
+  }
+
+  .speaker-editing .speech {
+    margin-top: 10px;
   }
 
   .para.turn-continue .who::before {
