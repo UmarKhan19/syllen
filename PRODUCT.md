@@ -49,6 +49,8 @@ knows who said what.
   app's own data folder from Settings.
 - Transcripts are read for long stretches, then copied or exported as SRT,
   VTT, or plain text.
+- Users often read along while listening. The player stays at the top of the
+  window and the transcript marks the passage and word being spoken.
 - English only for now.
 
 ## Capabilities and Constraints
@@ -57,6 +59,7 @@ knows who said what.
 - Speaker labeling for up to four speakers; can be switched off in Settings,
   in which case exports omit speaker prefixes.
 - Exports: SRT, VTT, TXT, plus copy-to-clipboard.
+- Waveform playback: play/pause, seek by waveform or word, a sticky player, and a transcript that follows the current passage and word. The audio is served to the webview over a loopback-only HTTP port with byte ranges because WebKitGTK cannot play Tauri's asset protocol media.
 - Settings drawer: speaker-labeling switch, yt-dlp version check and update.
 - The pipeline is visible as four stages: Download, Prepare, Transcribe,
   Speakers.

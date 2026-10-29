@@ -3,6 +3,7 @@
 Paste a YouTube link, get a speaker-labelled transcript on your own machine. Audio is downloaded to a temporary folder, transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz), and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Nothing is uploaded to a transcription service.
 
 - Speaker-labelled transcript with word timestamps
+- Waveform playback with play/pause and seek; the transcript follows the current passage and word
 - Export as SRT, VTT, or plain text
 - Tauri 2 + React + TypeScript desktop app for Linux, macOS, and Windows
 
@@ -14,7 +15,8 @@ Tested on Linux (Arch, WebKitGTK). The macOS and Windows builds use the same web
 2. Downloads the audio track and converts it to 16 kHz mono WAV with `ffmpeg`.
 3. Transcribes it with Voz in a Node sidecar.
 4. Labels the speakers with Who in the webview.
-5. Deletes the downloaded audio when the app closes, or on the next start after a crash.
+5. Serves the WAV to the player over a loopback HTTP port with byte ranges, so the transcript can be read along with the audio.
+6. Deletes the downloaded audio when the app closes, or on the next start after a crash.
 
 First run downloads the Voz model (350 MB) and the Who model (32 MB). They are cached for later runs.
 
@@ -42,11 +44,14 @@ Who runs in the webview through its browser WASM build, so diarization works on 
 
 Who runs in a background worker, loaded on demand: the first diarization pays its 44 MB WASM load and compile, but startup and the rest of the UI never wait for it. The WAV is parsed to samples in that worker, which skips Web Audio's 44.1 kHz decode and keeps the window responsive on long recordings.
 
+Playback needs its own local server. WebKitGTK cannot load audio from Tauri's `asset://` protocol (WebKit bug 146351, still open), so the Rust side binds a random loopback port and serves the one current WAV file with `Range` support. The player streams it, seeks instantly, and the transcript syncs from the word timestamps Voz already returned. The port only listens on `127.0.0.1` and serves only the job's audio.
+
 ## Requirements
 
 - Node.js 20 or newer
 - Rust 1.85 or newer
 - Tauri 2 prerequisites: on Linux `webkit2gtk-4.1`, `libappindicator-gtk3`, `librsvg`; on macOS Xcode Command Line Tools; on Windows WebView2 and the MSVC build tools
+- Linux audio playback also needs WebKitGTK's GStreamer plugins (`gstreamer`, `gst-plugins-base`, `gst-plugins-good`)
 - `ffmpeg` and `ffprobe` in `PATH`, or dropped into `src-tauri/resources/bin/`
 - `yt-dlp` in `PATH` or `src-tauri/resources/bin/`, or installed from the Settings panel
 

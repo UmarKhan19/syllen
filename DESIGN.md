@@ -53,6 +53,19 @@ margins do the separating.
 | `--alert-wash` | `#f7ecea` | Failure callout ground |
 | `--ok` | `#2a6540` | Success states |
 
+### Reading states
+
+Neutral washes, never accent colours: the current passage sits on `--read`,
+the spoken word on `--word`, and a hovered word on `--word-hover`. The
+unplayed waveform is `--wave`, a darker rule.
+
+| Token | Value | Use |
+|---|---|---|
+| `--read` | `rgba(20, 22, 26, 0.045)` | Current passage |
+| `--word-hover` | `rgba(20, 22, 26, 0.075)` | Word under the pointer |
+| `--word` | `rgba(20, 22, 26, 0.14)` | Word being spoken |
+| `--wave` | `#c9c6bf` | Unplayed waveform bars |
+
 ## Typography
 
 | Role | Face | Stack token | Notes |
@@ -77,6 +90,7 @@ text ships beside each font file.
 ## Geometry
 
 - Card radii: 12px (`--radius`), small controls: 9px (`--radius-sm`)
+- Sticky chrome: 58px topbar, 58px player directly below it; transcript paragraphs carry `scroll-margin-top: 128px` so a followed passage never hides under them
 - Transcript paragraph: ruled left margin, 58px timecode column, 96px speaker column, speech column at 68ch with 20px stand-off from the margin rule
 - Continuation ticks: hairline between turn-continue paragraphs
 - Shadow: single soft float shadow on the settings drawer only (`--shadow-float`); no drop shadows elsewhere
@@ -92,6 +106,10 @@ Two authored moments only:
 - Settings drawer slide-in (`slideIn`, 0.22s)
 - Progress rail fill (exponential ease-out, `cubic-bezier(0.22, 0.61, 0.36, 1)`)
 
+Follow-scrolling uses the browser's smooth scroll and falls back to an instant
+jump under `prefers-reduced-motion`. Highlight changes are instant: the
+reading position must not lag the audio.
+
 Overlay fade-in and toast rise are state transitions, not decoration. Respects
 `prefers-reduced-motion`.
 
@@ -101,6 +119,7 @@ Overlay fade-in and toast rise are state transitions, not decoration. Respects
 - **composer** — URL field with chain glyph, ink-filled primary action on the idle screen.
 - **pipeline** — Four named stages with ink-filled done markers, mono percent, ink fill rail.
 - **transcript** — Ruled left margin, timecode + speaker name in margin, speech set beside.
+- **player** — Sticky under the topbar: ink play button, mono clock, waveform seek bar with a hover time tag, and a quiet Follow toggle. No card, no shadow; a bottom hairline separates it from the text.
 - **specimen** — Idle-screen teaching surface using the transcript's own grid and inks.
 - **drawer** — Settings: speaker-labeling switch, yt-dlp version chip, update button, log.
 - **callout / alert** — Hairline-bordered surfaces; alert carries red text and a recovery line.
