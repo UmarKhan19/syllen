@@ -4876,6 +4876,7 @@ dependencies = [
 name = "yt-transcript"
 version = "0.1.0"
 dependencies = [
+ "http-range",
  "libc",
  "reqwest",
  "serde",

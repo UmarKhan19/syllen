@@ -1,17 +1,21 @@
+use http_range::HttpRange;
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufRead, BufReader},
+    fs::File,
+    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 const DAL_APP_ID: &str = "app.yttranscript.desktop";
+const MEDIA_ROUTE: &str = "/audio";
 
 #[derive(Clone, Default)]
 struct JobControl {
@@ -22,6 +26,163 @@ struct JobControl {
 
 struct AppState {
     control: JobControl,
+    media: Option<MediaServer>,
+}
+
+/// WebKitGTK refuses to play media from custom URI schemes, so the audio is
+/// served over loopback HTTP with byte ranges. One fixed path, loopback only.
+struct MediaServer {
+    port: u16,
+    current: Arc<Mutex<Option<PathBuf>>>,
+}
+
+impl MediaServer {
+    fn start() -> std::io::Result<Self> {
+        let listener = TcpListener::bind(("127.0.0.1", 0))?;
+        let port = listener.local_addr()?.port();
+        let current = Arc::new(Mutex::new(None));
+        let files = Arc::clone(&current);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let files = Arc::clone(&files);
+                std::thread::spawn(move || {
+                    let _ = serve_media(stream, &files);
+                });
+            }
+        });
+        Ok(Self { port, current })
+    }
+
+    fn serve(&self, path: &Path, job: &str) -> String {
+        if let Ok(mut current) = self.current.lock() {
+            *current = Some(path.to_path_buf());
+        }
+        format!("http://127.0.0.1:{}{MEDIA_ROUTE}?{job}", self.port)
+    }
+}
+
+fn serve_media(mut stream: TcpStream, files: &Mutex<Option<PathBuf>>) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+
+    let mut head = Vec::with_capacity(1024);
+    let mut chunk = [0u8; 1024];
+    while head.len() < 16 * 1024 {
+        let read = stream.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        head.extend_from_slice(&chunk[..read]);
+        if head.windows(4).any(|window| window == b"\r\n\r\n") {
+            break;
+        }
+    }
+
+    let head = String::from_utf8_lossy(&head);
+    let mut lines = head.lines();
+    let Some(request) = lines.next() else {
+        return write_error(&mut stream, 400, "Bad request", None);
+    };
+    let mut parts = request.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or_default();
+    if target.split('?').next().unwrap_or_default() != MEDIA_ROUTE {
+        return write_error(&mut stream, 404, "Not found", None);
+    }
+    if method != "GET" && method != "HEAD" {
+        return write_error(&mut stream, 405, "Method not allowed", None);
+    }
+
+    let path = files.lock().ok().and_then(|current| current.clone());
+    let Some(path) = path else {
+        return write_error(&mut stream, 404, "No audio for this job", None);
+    };
+    let mut file = match File::open(&path) {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!("media server: could not open {}: {error}", path.display());
+            return write_error(&mut stream, 404, "Audio file missing", None);
+        }
+    };
+    let len = file.metadata()?.len();
+    if len == 0 {
+        return write_error(&mut stream, 404, "Audio file is empty", None);
+    }
+
+    let mut range_header = None;
+    for line in head.lines().skip(1) {
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("range")
+        {
+            range_header = Some(value.trim());
+        }
+    }
+
+    let (status, start, end) = match range_header {
+        None => ("200 OK", 0, len - 1),
+        Some(header) => match HttpRange::parse(header, len) {
+            Ok(ranges) if ranges.len() == 1 => {
+                let range = ranges[0];
+                (
+                    "206 Partial Content",
+                    range.start,
+                    (range.start + range.length - 1).min(len - 1),
+                )
+            }
+            _ => {
+                return write_error(
+                    &mut stream,
+                    416,
+                    "Range not satisfiable",
+                    Some(&format!("bytes */{len}")),
+                );
+            }
+        },
+    };
+
+    let mut response = format!(
+        "HTTP/1.1 {status}\r\n\
+         Content-Type: audio/wav\r\n\
+         Accept-Ranges: bytes\r\n\
+         Content-Length: {}\r\n\
+         Cache-Control: no-store\r\n\
+         Connection: close\r\n",
+        end + 1 - start
+    );
+    if status.starts_with("206") {
+        response.push_str(&format!("Content-Range: bytes {start}-{end}/{len}\r\n"));
+    }
+    response.push_str("\r\n");
+    stream.write_all(response.as_bytes())?;
+
+    if method == "HEAD" {
+        return Ok(());
+    }
+
+    file.seek(SeekFrom::Start(start))?;
+    let mut writer = BufWriter::new(stream);
+    std::io::copy(&mut file.take(end + 1 - start), &mut writer)?;
+    writer.flush()
+}
+
+fn write_error(
+    stream: &mut TcpStream,
+    status: u16,
+    message: &str,
+    content_range: Option<&str>,
+) -> std::io::Result<()> {
+    let mut response = format!(
+        "HTTP/1.1 {status} {message}\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n",
+        message.len()
+    );
+    if let Some(range) = content_range {
+        response.push_str(&format!("Content-Range: {range}\r\n"));
+    }
+    response.push_str("\r\n");
+    response.push_str(message);
+    stream.write_all(response.as_bytes())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -46,6 +207,8 @@ struct JobResult {
     title: String,
     duration: Option<f64>,
     audio_path: String,
+    audio_url: String,
+    waveform: Vec<u8>,
     text: String,
     words: Vec<Word>,
 }
@@ -169,7 +332,11 @@ fn prepend_tool_path(cmd: &mut Command, tools: &Tools) {
     else {
         return;
     };
-    let probe = if cfg!(windows) { dir.join("ffprobe.exe") } else { dir.join("ffprobe") };
+    let probe = if cfg!(windows) {
+        dir.join("ffprobe.exe")
+    } else {
+        dir.join("ffprobe")
+    };
     if !probe.is_file() {
         return;
     }
@@ -269,7 +436,9 @@ fn run_streaming(
     let status = {
         let child = control.child.lock().unwrap().take();
         match child {
-            Some(mut c) => c.wait().map_err(|e| format!("Waiting for process failed: {e}"))?,
+            Some(mut c) => c
+                .wait()
+                .map_err(|e| format!("Waiting for process failed: {e}"))?,
             None => return Err("The process disappeared while running".into()),
         }
     };
@@ -389,7 +558,11 @@ async fn check_tools(app: AppHandle) -> ToolsStatus {
                 .join("@desert-ant-labs")
                 .join("voz")
                 .is_dir()
-            && tools.sidecar.join("node_modules").join("onnxruntime-node").is_dir(),
+            && tools
+                .sidecar
+                .join("node_modules")
+                .join("onnxruntime-node")
+                .is_dir(),
     }
 }
 
@@ -426,15 +599,19 @@ async fn update_yt_dlp(app: AppHandle) -> Result<UpdateResult, String> {
         .app_data_dir()
         .map_err(|e| format!("No app data directory: {e}"))?
         .join("bin");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
     let temp = dir.join(if cfg!(windows) {
         "yt-dlp-new.exe"
     } else {
         "yt-dlp-new"
     });
-    let target = dir.join(if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" });
-    std::fs::write(&temp, &bytes)
-        .map_err(|e| format!("Could not write the download: {e}"))?;
+    let target = dir.join(if cfg!(windows) {
+        "yt-dlp.exe"
+    } else {
+        "yt-dlp"
+    });
+    std::fs::write(&temp, &bytes).map_err(|e| format!("Could not write the download: {e}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -507,16 +684,16 @@ async fn latest_yt_dlp_version() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn start_job(app: AppHandle, state: State<'_, AppState>, url: String) -> Result<JobStarted, String> {
+fn start_job(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<JobStarted, String> {
     let url = url.trim().to_string();
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Paste a full video URL starting with http:// or https://".into());
     }
-    if state
-        .control
-        .running
-        .swap(true, Ordering::SeqCst)
-    {
+    if state.control.running.swap(true, Ordering::SeqCst) {
         return Err("A job is already running.".into());
     }
     state.control.cancel.store(false, Ordering::SeqCst);
@@ -599,6 +776,15 @@ fn run_pipeline(
     let (text, words, audio_duration) = transcribe(&tools, &audio, app, id, control)?;
     check_cancel(control)?;
 
+    let audio_url = app
+        .try_state::<AppState>()
+        .and_then(|state| state.media.as_ref().map(|media| media.serve(&audio, id)))
+        .unwrap_or_default();
+    let waveform = wav_peaks(&audio, 2000).unwrap_or_else(|error| {
+        eprintln!("waveform: {error}");
+        Vec::new()
+    });
+
     app.emit(
         "job:result",
         JobResult {
@@ -606,6 +792,8 @@ fn run_pipeline(
             title,
             duration: audio_duration.or(metadata_duration),
             audio_path: audio.to_string_lossy().into_owned(),
+            audio_url,
+            waveform,
             text,
             words,
         },
@@ -683,12 +871,7 @@ fn download(
 
     let (status, stderr) = run_streaming(&mut cmd, control, &mut |line| {
         if let Some(rest) = line.strip_prefix("download:") {
-            if let Ok(percent) = rest
-                .trim()
-                .trim_end_matches('%')
-                .trim()
-                .parse::<f64>()
-            {
+            if let Ok(percent) = rest.trim().trim_end_matches('%').trim().parse::<f64>() {
                 emit_progress(app, id, "download", Some(percent / 100.0));
             }
         }
@@ -729,9 +912,82 @@ fn convert(tools: &Tools, dir: &Path, control: &JobControl) -> Result<PathBuf, S
         .arg(&output);
     let (status, stderr) = run_streaming(&mut cmd, control, &mut |_| {})?;
     if !status.success() {
-        return Err(format!("Could not convert the audio to 16 kHz mono.\n{}", tail(&stderr)));
+        return Err(format!(
+            "Could not convert the audio to 16 kHz mono.\n{}",
+            tail(&stderr)
+        ));
     }
     Ok(output)
+}
+
+/// Peak amplitudes for the player's waveform, one byte per bucket.
+fn wav_peaks(path: &Path, buckets: usize) -> Result<Vec<u8>, String> {
+    let mut file =
+        File::open(path).map_err(|e| format!("Could not open {}: {e}", path.display()))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Could not read {}: {e}", path.display()))?
+        .len();
+
+    let mut riff = [0u8; 12];
+    file.read_exact(&mut riff)
+        .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+    if &riff[0..4] != b"RIFF" || &riff[8..12] != b"WAVE" {
+        return Err("Not a WAV file".into());
+    }
+
+    let mut offset = 12u64;
+    loop {
+        if offset + 8 > len {
+            return Err("The WAV file has no audio data".into());
+        }
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+        let mut header = [0u8; 8];
+        file.read_exact(&mut header)
+            .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+        let size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as u64;
+        if &header[0..4] == b"data" {
+            return peaks_from_pcm(&mut file, size.min(len - offset - 8), buckets)
+                .map_err(|e| format!("Could not read the waveform: {e}"));
+        }
+        offset += 8 + size + (size & 1);
+    }
+}
+
+fn peaks_from_pcm(reader: &mut impl Read, bytes: u64, buckets: usize) -> std::io::Result<Vec<u8>> {
+    let buckets = buckets.max(1);
+    let samples = bytes / 2;
+    let per_bucket = (samples / buckets as u64).max(1);
+    let mut peaks = Vec::with_capacity(buckets);
+    let mut buffer = [0u8; 8192];
+    let mut seen = 0u64;
+    let mut bucket_end = per_bucket;
+    let mut loudest = 0u16;
+    let mut remaining = samples * 2;
+
+    while remaining >= 2 {
+        let take = buffer.len().min(remaining as usize) & !1;
+        reader.read_exact(&mut buffer[..take])?;
+        remaining -= take as u64;
+        for pair in buffer[..take].as_chunks::<2>().0 {
+            let sample = i16::from_le_bytes(*pair).unsigned_abs();
+            loudest = loudest.max(sample);
+            seen += 1;
+            if seen >= bucket_end {
+                peaks.push((u32::from(loudest.min(32767)) * 255 / 32767) as u8);
+                loudest = 0;
+                bucket_end += per_bucket;
+                if peaks.len() == buckets {
+                    return Ok(peaks);
+                }
+            }
+        }
+    }
+    if seen > 0 && peaks.len() < buckets {
+        peaks.push((u32::from(loudest) * 255 / 32767) as u8);
+    }
+    Ok(peaks)
 }
 
 fn transcribe(
@@ -807,8 +1063,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             cleanup_jobs(app.handle());
+            let media = MediaServer::start()
+                .map_err(|error| eprintln!("Playback server unavailable: {error}"))
+                .ok();
             app.manage(AppState {
                 control: JobControl::default(),
+                media,
             });
             Ok(())
         })
@@ -832,4 +1092,136 @@ pub fn run() {
             cleanup_jobs(app_handle);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wav_bytes(samples: &[i16]) -> Vec<u8> {
+        let data_len = (samples.len() * 2) as u32;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&16_000u32.to_le_bytes());
+        bytes.extend_from_slice(&32_000u32.to_le_bytes());
+        bytes.extend_from_slice(&2u16.to_le_bytes());
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_len.to_le_bytes());
+        for sample in samples {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        bytes
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "yt-transcript-{name}-{}-{}.tmp",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn waveform_peaks_follow_the_pcm_data() {
+        let path = temp_path("peaks");
+        let samples = [0i16, 1000, -32768, 2000, -100, 300, 400, 500];
+        std::fs::write(&path, wav_bytes(&samples)).unwrap();
+        let peaks = wav_peaks(&path, 4).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(peaks.len(), 4);
+        assert_eq!(peaks[0], (1000 * 255 / 32767) as u8);
+        assert_eq!(peaks[1], 255);
+        assert_eq!(peaks[3], (500 * 255 / 32767) as u8);
+    }
+
+    #[test]
+    fn waveform_peaks_survive_odd_reads() {
+        struct Trickle {
+            data: Vec<u8>,
+            position: usize,
+        }
+        impl Read for Trickle {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.position >= self.data.len() || buf.is_empty() {
+                    return Ok(0);
+                }
+                buf[0] = self.data[self.position];
+                self.position += 1;
+                Ok(1)
+            }
+        }
+
+        let mut data = Vec::new();
+        for sample in [1000i16, -2000, 3000, -4000] {
+            data.extend_from_slice(&sample.to_le_bytes());
+        }
+        let mut reader = Trickle { data, position: 0 };
+        let peaks = peaks_from_pcm(&mut reader, 8, 2).unwrap();
+        assert_eq!(peaks.len(), 2);
+        assert_eq!(peaks[0], (2000 * 255 / 32767) as u8);
+        assert_eq!(peaks[1], (4000 * 255 / 32767) as u8);
+    }
+
+    #[test]
+    fn media_server_serves_byte_ranges() {
+        let bytes = wav_bytes(&[1i16; 50]);
+        let path = temp_path("media");
+        std::fs::write(&path, &bytes).unwrap();
+        let server = MediaServer::start().unwrap();
+        server.serve(&path, "test-job");
+
+        let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        stream
+            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=10-19\r\n\r\n")
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
+
+        let split = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap();
+        let head = String::from_utf8_lossy(&response[..split]);
+        let body = &response[split + 4..];
+        assert!(head.starts_with("HTTP/1.1 206"));
+        assert!(head.contains("Content-Range: bytes 10-19/"));
+        assert_eq!(body, &bytes[10..20]);
+
+        let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        stream
+            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-\r\n\r\n")
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let split = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap();
+        let head = String::from_utf8_lossy(&response[..split]);
+        assert!(head.starts_with("HTTP/1.1 206"));
+        assert!(head.contains(&format!(
+            "Content-Range: bytes 0-{}/{}",
+            bytes.len() - 1,
+            bytes.len()
+        )));
+        assert_eq!(&response[split + 4..], bytes.as_slice());
+    }
 }
