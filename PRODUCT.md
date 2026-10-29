@@ -23,10 +23,10 @@ cannot easily read or caption by hand.
 
 ## Product Purpose
 
-Paste a YouTube link, get a transcript with speaker labels and word-level
-timestamps, produced entirely on the user's own machine. Success is a clean,
-readable, exportable transcript that never required a cloud transcription
-service.
+Paste a YouTube link or choose a local video/audio file, get a transcript with
+speaker labels and word-level timestamps, produced entirely on the user's own
+machine. Success is a clean, readable, exportable transcript that never
+required a cloud transcription service.
 
 ## Positioning
 
@@ -37,16 +37,17 @@ knows who said what.
 
 ## Operating Context
 
-- Single-video jobs: one finished YouTube video at a time. No playlists, no
-  live streams.
+- Single-source jobs: one finished YouTube video or one local video/audio file
+  at a time. No playlists, no live streams, no multi-file queues.
 - The wait is real. A first run downloads a 350 MB speech model (Voz) and a
   32 MB speaker model (Who); later runs are cached. Transcription of a long
   video takes minutes, so the pipeline state is part of the product, not
   decoration.
 - The window stays interactive during a job: diarization runs in a web worker,
   so the user can cancel, read, or leave the app open.
-- Downloads need `yt-dlp` and `ffmpeg` on the machine, or installed into the
-  app's own data folder from Settings.
+- Links need `yt-dlp`; all jobs need `ffmpeg`. Both can live on the machine or
+  be installed into the app's own data folder from Settings. Local file jobs do
+  not need `yt-dlp`.
 - Transcripts are read for long stretches, then copied or exported as SRT,
   VTT, or plain text.
 - Users often read along while listening. The player stays at the top of the
@@ -55,14 +56,16 @@ knows who said what.
 
 ## Capabilities and Constraints
 
+- Two inputs, one composer: paste a YouTube link or choose a local video/audio
+  file. Files are read in place and never uploaded.
 - Local speech-to-text with word-level timestamps (80 ms resolution).
 - Speaker labeling for up to four speakers; can be switched off in Settings,
   in which case exports omit speaker prefixes.
 - Exports: SRT, VTT, TXT, plus copy-to-clipboard.
 - Waveform playback: play/pause, seek by waveform or word, a sticky player, and a transcript that follows the current passage and word. The audio is served to the webview over a loopback-only HTTP port with byte ranges because WebKitGTK cannot play Tauri's asset protocol media.
 - Settings drawer: speaker-labeling switch, yt-dlp version check and update.
-- The pipeline is visible as four stages: Download, Prepare, Transcribe,
-  Speakers.
+- The pipeline is visible as four stages: Download (links only), Prepare,
+  Transcribe, Speakers. File jobs begin at Prepare.
 - Missing tools are detected at startup and reported in-app.
 - Model weights are source-available, not MIT. The footer attribution
   ("Powered by Desert Ant Labs") satisfies the attribution requirement and

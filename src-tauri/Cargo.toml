@@ -1,7 +1,7 @@
 [package]
 name = "yt-transcript"
 version = "0.1.0"
-description = "Local YouTube transcription with speaker labels"
+description = "Local video and audio transcription with speaker labels"
 authors = ["Umar Khan"]
 edition = "2024"
 

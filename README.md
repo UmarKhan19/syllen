@@ -1,6 +1,6 @@
 # YT Transcript
 
-Paste a YouTube link, get a speaker-labelled transcript on your own machine. Audio is downloaded to a temporary folder, transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz), and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Nothing is uploaded to a transcription service.
+Paste a YouTube link or choose a local video/audio file, get a speaker-labelled transcript on your own machine. Links are downloaded to a temporary folder; local files are read in place. Either way the audio is transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz) and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Nothing is uploaded to a transcription service.
 
 - Speaker-labelled transcript with word timestamps
 - Waveform playback with play/pause and seek; the transcript follows the current passage and word
@@ -11,12 +11,12 @@ Tested on Linux (Arch, WebKitGTK). The macOS and Windows builds use the same web
 
 ## What it does
 
-1. Reads the video metadata with `yt-dlp`.
-2. Downloads the audio track and converts it to 16 kHz mono WAV with `ffmpeg`.
+1. For a link, reads the video metadata and downloads the audio with `yt-dlp`. A local video or audio file is read in place.
+2. Converts the audio to 16 kHz mono WAV with `ffmpeg`.
 3. Transcribes it with Voz in a Node sidecar.
 4. Labels the speakers with Who in the webview.
 5. Serves the WAV to the player over a loopback HTTP port with byte ranges, so the transcript can be read along with the audio.
-6. Deletes the downloaded audio when the app closes, or on the next start after a crash.
+6. Deletes the temporary audio when the app closes, or on the next start after a crash. The original file is never modified.
 
 First run downloads the Voz model (350 MB) and the Who model (32 MB). They are cached for later runs.
 
@@ -53,7 +53,7 @@ Playback needs its own local server. WebKitGTK cannot load audio from Tauri's `a
 - Tauri 2 prerequisites: on Linux `webkit2gtk-4.1`, `libappindicator-gtk3`, `librsvg`; on macOS Xcode Command Line Tools; on Windows WebView2 and the MSVC build tools
 - Linux audio playback also needs WebKitGTK's GStreamer plugins (`gstreamer`, `gst-plugins-base`, `gst-plugins-good`)
 - `ffmpeg` and `ffprobe` in `PATH`, or dropped into `src-tauri/resources/bin/`
-- `yt-dlp` in `PATH` or `src-tauri/resources/bin/`, or installed from the Settings panel
+- `yt-dlp` in `PATH` or `src-tauri/resources/bin/`, or installed from the Settings panel. Only YouTube links need it; local files do not.
 
 ## Run from source
 
@@ -106,7 +106,7 @@ The app code is MIT (see `LICENSE`). The models and SDKs are not:
 
 ## Privacy
 
-The audio never leaves the machine after the download. The network is used for:
+The audio never leaves the machine. Local files are read in place and never uploaded. The network is used for:
 
 - YouTube, through `yt-dlp`, to fetch the audio
 - `github.com/yt-dlp/yt-dlp`, when you press Update yt-dlp in Settings

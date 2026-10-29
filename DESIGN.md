@@ -81,7 +81,7 @@ text ships beside each font file.
 
 - Window bar: 58px
 - Display headline: 34px, weight 600, tracking −0.022em
-- URL field / primary action: 54px
+- Source field / primary action: 54px
 - Body copy: 15px / 1.5
 - Spoken-word transcript: 17px / 1.72, 68ch measure, `text-wrap: pretty`
 - Meta text: 12.5px, 1.55–1.6
@@ -116,7 +116,7 @@ Overlay fade-in and toast rise are state transitions, not decoration. Respects
 ## Components (see `src/styles.css`)
 
 - **topbar** — 58px window bar: wordmark left, "Audio never leaves this machine" + green pip, settings right.
-- **composer** — URL field with chain glyph, ink-filled primary action on the idle screen.
+- **composer** — URL field with chain glyph and an inline Upload action; a chosen file becomes a chip with name, format, size, Change and remove. Dropping a file on the window does the same. Ink-filled primary action on the idle screen.
 - **pipeline** — Four named stages with ink-filled done markers, mono percent, ink fill rail.
 - **transcript** — Ruled left margin, timecode + speaker name in margin, speech set beside.
 - **player** — Sticky under the topbar: ink play button, mono clock, waveform seek bar with a hover time tag, and a quiet Follow toggle. No card, no shadow; a bottom hairline separates it from the text.
