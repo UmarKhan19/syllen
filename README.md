@@ -1,8 +1,9 @@
 # YT Transcript
 
-Paste a YouTube link or choose a local video/audio file, get a speaker-labelled transcript on your own machine. Links are downloaded to a temporary folder; local files are read in place. Either way the audio is transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz) and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Nothing is uploaded to a transcription service.
+Paste a YouTube link or choose a local video/audio file, get a speaker-labelled transcript on your own machine. Links are downloaded to a temporary folder; local files are read in place. Either way the audio is transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz) and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Finished transcripts and their audio are kept in a local library. Nothing is uploaded to a transcription service.
 
 - Speaker-labelled transcript with word timestamps
+- Local library: transcripts and audio persist in SQLite, ready to reopen, rename, or delete
 - Waveform playback with play/pause and seek; the transcript follows the current passage and word
 - Export as SRT, VTT, or plain text
 - Tauri 2 + React + TypeScript desktop app for Linux, macOS, and Windows
@@ -15,8 +16,9 @@ Tested on Linux (Arch, WebKitGTK). The macOS and Windows builds use the same web
 2. Converts the audio to 16 kHz mono WAV with `ffmpeg`.
 3. Transcribes it with Voz in a Node sidecar.
 4. Labels the speakers with Who in the webview.
-5. Serves the WAV to the player over a loopback HTTP port with byte ranges, so the transcript can be read along with the audio.
-6. Deletes the temporary audio when the app closes, or on the next start after a crash. The original file is never modified.
+5. Moves the audio into the app data folder and saves the transcript, words, waveform, speaker labels, and names in a SQLite library.
+6. Serves the saved audio to the player over a loopback HTTP port with byte ranges, so the transcript can be read along with the audio.
+7. Deletes the temporary job folder; the library copy stays until you delete it from the Library drawer. The original file is never modified.
 
 First run downloads the Voz model (350 MB) and the Who model (32 MB). They are cached for later runs.
 
@@ -83,6 +85,12 @@ The gear button opens a drawer with two controls:
 - **Speaker labeling.** Turns Who on or off for the next transcription. Off skips the 32 MB model download and the diarization pass; SRT, VTT, and TXT exports then omit speaker prefixes.
 - **Update yt-dlp.** Checks the latest release on GitHub and shows **Up to date** or **Update available**. The button downloads the latest official standalone `yt-dlp` into the app data folder (`bin/yt-dlp` or `bin/yt-dlp.exe`) and prefers it over `PATH` and the bundled copy. The system install is not modified, so a pip- or package-managed `yt-dlp` is safe. The check and the update need network access to GitHub.
 
+### Library
+
+Finished transcripts and their audio are saved on this machine, in `library.db` and `library/` inside the app data folder. The **Library** button in the top bar lists them; the newest three also appear on the idle screen. Opening one restores the transcript, speaker labels and names, waveform, and player. Deleting a transcript deletes its audio too.
+
+Audio is kept as the 16 kHz mono WAV the transcriber used, about 115 MB per hour. A one-hour podcast is roughly 115 MB; the library drawer shows the size of each recording and the total.
+
 ### Bundling yt-dlp and ffmpeg
 
 Put the binaries in `src-tauri/resources/bin/`:
@@ -113,7 +121,7 @@ The audio never leaves the machine. Local files are read in place and never uplo
 - `huggingface.co` and `cdn.jsdelivr.net`, on first run, to download model files
 - Desert Ant Labs' license server, for the monthly model license request
 
-Downloaded audio lives in the app cache (`app_cache_dir/jobs`) and is removed on exit or when the next job starts. Model files live in `~/.cache/desert-ant-models` and the webview's cache.
+Downloaded audio lives in the app cache (`app_cache_dir/jobs`) while a job runs and is removed when the job finishes. Finished audio and transcripts move to the library in the app data folder (`library.db` and `library/`); they stay on this machine until you delete them. Model files live in `~/.cache/desert-ant-models` and the webview's cache.
 
 Downloading videos from YouTube may violate its terms of service. Use this for content you have the right to process.
 

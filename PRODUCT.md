@@ -31,9 +31,9 @@ required a cloud transcription service.
 ## Positioning
 
 Local-first transcription with speaker labels. The differentiator is not
-quality of the text but the privacy and the labeling: the audio is downloaded,
-transcribed, and deleted without ever leaving the machine, and the output
-knows who said what.
+quality of the text but the privacy and the labeling: the audio is downloaded
+or read in place, transcribed on the machine, and kept in a local library that
+never leaves it, and the output knows who said what.
 
 ## Operating Context
 
@@ -50,6 +50,10 @@ knows who said what.
   not need `yt-dlp`.
 - Transcripts are read for long stretches, then copied or exported as SRT,
   VTT, or plain text.
+- Finished transcripts and their audio are kept in a local library, so a user
+  can come back to yesterday's interview without transcribing it again. The
+  library is reachable from the top bar and the newest three sit on the idle
+  screen.
 - Users often read along while listening. The player stays at the top of the
   window and the transcript marks the passage and word being spoken.
 - English only for now.
@@ -62,6 +66,10 @@ knows who said what.
 - Speaker labeling for up to four speakers; can be switched off in Settings,
   in which case exports omit speaker prefixes.
 - Exports: SRT, VTT, TXT, plus copy-to-clipboard.
+- Local library: every finished transcript and its audio are saved in SQLite
+  under the app data folder, with the speaker labels and names. Open one from
+  the Library drawer or the idle screen; delete one and its audio is deleted
+  too. Storage is shown per recording and in total.
 - Waveform playback: play/pause, seek by waveform or word, a sticky player, and a transcript that follows the current passage and word. The audio is served to the webview over a loopback-only HTTP port with byte ranges because WebKitGTK cannot play Tauri's asset protocol media.
 - Settings drawer: speaker-labeling switch, yt-dlp version check and update.
 - The pipeline is visible as four stages: Download (links only), Prepare,
@@ -78,8 +86,10 @@ knows who said what.
 - Voice: plain, factual, tool-like. The existing copy names the action
   ("Transcribe", "Update yt-dlp") and states facts (model sizes, deletion,
   licensing). No marketing claims, no urgency, no exclamation.
-- The privacy promise is factual and load-bearing: "Audio is deleted when the
-  app closes", "Nothing is uploaded", "Models run on this machine".
+- The privacy promise is factual and load-bearing: "Audio never leaves this
+  machine", "Nothing is uploaded", "Models run on this machine". The library is
+  local: its database and audio live in the app data folder and are deleted
+  only when the user deletes them.
 - Footer attribution to Desert Ant Labs for Voz and Who is required.
 
 ## Evidence on Hand
@@ -89,7 +99,8 @@ knows who said what.
   `Cue`, plus the caption formatters.
 - `src/App.tsx` — the single screen: composer, pipeline, result, settings
   drawer, export actions.
-- `src-tauri/src/lib.rs` — the Rust pipeline and the job event contract.
+- `src-tauri/src/lib.rs` — the Rust pipeline, the SQLite library, and the job
+  event contract.
 - No screenshots, testimonials, benchmarks, or press. The app is young and
   private; future work must not invent them.
 

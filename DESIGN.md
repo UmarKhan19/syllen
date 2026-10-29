@@ -8,7 +8,8 @@ A transcript is a document, so the app is a document surface — one paper groun
 black ink, hairline rules, and colour reserved for the people speaking. Chrome
 is a newsprint grotesk; spoken words are set in a book serif; timecodes are set
 in mono. No decorative accent, no gradients, no glass, no cards: rules and
-margins do the separating.
+margins do the separating. The library is the same world's shelf: ruled rows,
+mono dates and sizes, no thumbnails.
 
 ## Palette (tokens in `src/styles.css`)
 
@@ -93,17 +94,19 @@ text ships beside each font file.
 - Sticky chrome: 58px topbar, 58px player directly below it; transcript paragraphs carry `scroll-margin-top: 128px` so a followed passage never hides under them
 - Transcript paragraph: ruled left margin, 58px timecode column, 96px speaker column, speech column at 68ch with 20px stand-off from the margin rule
 - Continuation ticks: hairline between turn-continue paragraphs
-- Shadow: single soft float shadow on the settings drawer only (`--shadow-float`); no drop shadows elsewhere
+- Shadow: single soft float shadow on the drawers only (`--shadow-float`); no drop shadows elsewhere
+- Drawers: 420px for Settings, 480px for the Library, both full-height from the right
 
 ## Colour discipline
 
 Colour carries meaning only: the four speaker pens, the green privacy pip, the
-red of a failure. No decorative accent appears anywhere. Amber is not used.
+green saved pip, the red of a failure or a destructive action. No decorative
+accent appears anywhere. Amber is not used.
 
 ## Motion
 
 Two authored moments only:
-- Settings drawer slide-in (`slideIn`, 0.22s)
+- Drawer slide-in (`slideIn`, 0.22s), for Settings and the Library
 - Progress rail fill (exponential ease-out, `cubic-bezier(0.22, 0.61, 0.36, 1)`)
 
 Follow-scrolling uses the browser's smooth scroll and falls back to an instant
@@ -115,11 +118,14 @@ Overlay fade-in and toast rise are state transitions, not decoration. Respects
 
 ## Components (see `src/styles.css`)
 
-- **topbar** — 58px window bar: wordmark left, "Audio never leaves this machine" + green pip, settings right.
+- **topbar** — 58px window bar: wordmark left, "Audio never leaves this machine" + green pip, Library with a mono count, settings right.
 - **composer** — URL field with chain glyph and an inline Upload action; a chosen file becomes a chip with name, format, size, Change and remove. Dropping a file on the window does the same. Ink-filled primary action on the idle screen.
 - **pipeline** — Four named stages with ink-filled done markers, mono percent, ink fill rail.
 - **transcript** — Ruled left margin, timecode + speaker name in margin, speech set beside.
 - **player** — Sticky under the topbar: ink play button, mono clock, waveform seek bar with a hover time tag, and a quiet Follow toggle. No card, no shadow; a bottom hairline separates it from the text.
+- **recent** — Idle-screen shelf for the newest three transcripts, on the transcript's own 154px ruled margin: mono date in the margin, title in grotesk, duration and size in mono. Replaces the example specimen once real work exists.
+- **library drawer** — Right-hand drawer, 480px: mono summary (count and total audio size), search once there are more than five, ruled rows with title, date, duration, speakers, and size, a quiet trash action, and an inline delete confirmation. The footer states where the files live.
+- **saved marker** — The result meta ends with a green-pip "Saved locally" (or "Not saved") so persistence is stated, not implied.
 - **specimen** — Idle-screen teaching surface using the transcript's own grid and inks.
 - **drawer** — Settings: speaker-labeling switch, yt-dlp version chip, update button, log.
 - **callout / alert** — Hairline-bordered surfaces; alert carries red text and a recovery line.
