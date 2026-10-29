@@ -1,61 +1,25 @@
 # YT Transcript
 
-Paste a YouTube link or choose a local video/audio file, get a speaker-labelled transcript on your own machine. Links are downloaded to a temporary folder; local files are read in place. Either way the audio is transcribed locally with [Voz](https://huggingface.co/desert-ant-labs/voz) and split into speakers with [Who](https://huggingface.co/desert-ant-labs/who). Finished transcripts and their audio are kept in a local library. Nothing is uploaded to a transcription service.
+YT Transcript turns a YouTube link or a local video or audio file into a speaker-labeled transcript with word-level timestamps. Speech recognition and speaker labeling run on your machine. Finished transcripts and their audio stay in a local library, and no audio or transcript is uploaded to a transcription service.
 
-- Speaker-labelled transcript with word timestamps
-- Local library: transcripts and audio persist in SQLite, ready to reopen, rename, or delete
-- Waveform playback with play/pause and seek; the transcript follows the current passage and word
-- Export as SRT, VTT, or plain text
-- Tauri 2 + React + TypeScript desktop app for Linux, macOS, and Windows
+Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview APIs and Node SDK but have not been verified on those systems.
 
-Tested on Linux (Arch, WebKitGTK). The macOS and Windows builds use the same webview APIs and Node SDK but have not been verified on those systems yet.
+## Features
 
-## What it does
-
-1. For a link, reads the video metadata and downloads the audio with `yt-dlp`. A local video or audio file is read in place.
-2. Converts the audio to 16 kHz mono WAV with `ffmpeg`.
-3. Transcribes it with Voz in a Node sidecar.
-4. Labels the speakers with Who in the webview.
-5. Moves the audio into the app data folder and saves the transcript, words, waveform, speaker labels, and names in a SQLite library.
-6. Serves the saved audio to the player over a loopback HTTP port with byte ranges, so the transcript can be read along with the audio.
-7. Deletes the temporary job folder; the library copy stays until you delete it from the Library drawer. The original file is never modified.
-
-First run downloads the Voz model (350 MB) and the Who model (32 MB). They are cached for later runs.
-
-## What it does not do yet
-
-- **No filler-word removal.** Uhm is Apple-only and its Linux path needs custom ONNX glue. The transcript keeps "uh" and "um" for now.
-- **No Align pass.** Voz already returns word-level timestamps at 80 ms resolution, which is enough for captions. Align is only useful if you need tighter cut points.
-- **English only.** Voz supports 25 languages but does not detect them, and a wrong guess produces fluent nonsense. A language picker and automatic routing come later.
-- **No playlists or live streams.** Single, finished videos only.
-- **Up to four speakers.** Who numbers the four most present voices. On a short single-speaker clip it can split one voice into two; longer conversations are more stable.
-
-## How it works
-
-```
-React + TypeScript (Tauri webview)
-        │  invoke / events
-        ▼
-Rust core: yt-dlp · ffmpeg · temp files · job state
-        │  NDJSON over stdout
-        ▼
-Node sidecar: Voz (onnxruntime-node)
-```
-
-Who runs in the webview through its browser WASM build, so diarization works on every platform without a native module. The Node sidecar is only needed for Voz, whose SDK has no Rust or Python equivalent.
-
-Who runs in a background worker, loaded on demand: the first diarization pays its 44 MB WASM load and compile, but startup and the rest of the UI never wait for it. The WAV is parsed to samples in that worker, which skips Web Audio's 44.1 kHz decode and keeps the window responsive on long recordings.
-
-Playback needs its own local server. WebKitGTK cannot load audio from Tauri's `asset://` protocol (WebKit bug 146351, still open), so the Rust side binds a random loopback port and serves the one current WAV file with `Range` support. The player streams it, seeks instantly, and the transcript syncs from the word timestamps Voz already returned. The port only listens on `127.0.0.1` and serves only the job's audio.
+- Speaker-labeled transcript with word timestamps at 80 ms resolution.
+- Local library in SQLite. Reopen a transcript, rename its speakers, export it, or delete it with its audio.
+- Waveform playback with click-to-seek. The transcript follows the current passage and word, and following can be turned off.
+- Export as SRT, VTT, or TXT, or copy the transcript to the clipboard.
+- Speaker labeling can be switched off to skip the 32 MB speaker model and the diarization pass.
 
 ## Requirements
 
-- Node.js 20 or newer
-- Rust 1.85 or newer
-- Tauri 2 prerequisites: on Linux `webkit2gtk-4.1`, `libappindicator-gtk3`, `librsvg`; on macOS Xcode Command Line Tools; on Windows WebView2 and the MSVC build tools
-- Linux audio playback also needs WebKitGTK's GStreamer plugins (`gstreamer`, `gst-plugins-base`, `gst-plugins-good`)
-- `ffmpeg` and `ffprobe` in `PATH`, or dropped into `src-tauri/resources/bin/`
-- `yt-dlp` in `PATH` or `src-tauri/resources/bin/`, or installed from the Settings panel. Only YouTube links need it; local files do not.
+- Node.js 20 or newer and Rust 1.85 or newer.
+- Tauri 2 prerequisites for your OS. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for package names.
+- `ffmpeg` and `ffprobe` in `PATH`, or in `src-tauri/resources/bin/`.
+- `yt-dlp` for YouTube links. It can live in `PATH`, in `src-tauri/resources/bin/`, or in the app data folder after an update from Settings. Local file jobs do not need it.
+- On Linux, GStreamer base and good plugins for audio playback.
+- About 380 MB for the two models on first run, plus disk space for the library.
 
 ## Run from source
 
@@ -65,86 +29,185 @@ npm run sidecar:install
 npm run tauri dev
 ```
 
-`sidecar:install` installs `@desert-ant-labs/voz` and `onnxruntime-node` into `src-tauri/sidecar`. Its `.npmrc` sets `ignore-scripts=true` on purpose: `onnxruntime-node`'s postinstall tries to resolve CUDA packages from NuGet and fails on many machines, while the CPU binary it needs is already in the npm tarball.
+`sidecar:install` installs the Voz SDK and `onnxruntime-node` into `src-tauri/sidecar`. The sidecar's npm config skips lifecycle scripts on purpose. `onnxruntime-node`'s postinstall tries to resolve CUDA packages from NuGet and fails on many machines. The CPU binary it needs is already in the npm tarball.
+
+On first use, Voz downloads about 350 MB and Who about 32 MB. Both are cached for later runs.
+
+## Using the app
+
+1. Paste a URL, choose a file with Upload, or drop a file on the window.
+2. Select Transcribe. Link jobs show Download, Prepare, Transcribe, and, when labeling is on, Speakers. File jobs start at Prepare.
+3. Cancel stops the download, conversion, or transcription. Speaker labeling runs in a background worker and cannot be cancelled once it starts, but the window stays responsive.
+4. When the job finishes, the player and transcript appear. Click a timecode or a word to seek. Click a speaker name to rename it; the name applies to every passage and every export.
+5. Use Copy, SRT, VTT, or TXT. The Library button lists saved transcripts, and the newest three also appear on the idle screen.
+
+## How it works
+
+```
+React + TypeScript (Tauri webview)
+        │ invoke / events
+        ▼
+Rust core: yt-dlp, ffmpeg, SQLite library, loopback audio server
+        │ NDJSON over stdout
+        ▼
+Node sidecar: Voz speech recognition (onnxruntime-node)
+```
+
+Who runs in the webview through its browser WASM build, so diarization works without a native module.
+
+The pipeline:
+
+1. Read the video metadata with `yt-dlp`. Live streams are rejected, and playlists are not expanded.
+2. Download the best audio with `yt-dlp` and extract it to WAV. Local files skip this step and are read in place.
+3. Convert to 16 kHz mono PCM16 WAV with `ffmpeg`.
+4. Transcribe with Voz in the Node sidecar. It returns the text, word timestamps, and duration.
+5. Compute a 2,000-bucket waveform, move the WAV into the library, and save the transcript, words, and audio size to SQLite.
+6. Point the loopback audio server at the saved WAV and send the result to the UI. The player streams it from that URL.
+7. The UI labels the speakers with Who in a web worker. The worker parses the WAV into Float32 samples, runs the model, and returns speaker turns. The app assigns each word to the speaker with the largest overlap, groups words into readable passages, and saves the segments and speaker count to the same row.
+8. Clean up the job cache once the audio is in the library. The library copy stays until you delete it.
+
+A few implementation choices shape the design:
+
+- The Node sidecar exists because Voz has no Rust binding. It runs one process per job and streams NDJSON events on stdout.
+- Who runs in a worker because its WASM bundle and compile would otherwise block the interface. The worker is loaded on first diarization and reused.
+- Playback needs a local server because WebKitGTK cannot play media from Tauri's `asset://` protocol. The server binds `127.0.0.1` on a random port, serves only the current WAV, and supports `Range` requests for seeking.
+
+## Data and storage
+
+| Data | Location | Notes |
+|---|---|---|
+| Library database | app data / `library.db` | SQLite with WAL |
+| Saved audio | app data / `library/<job>.wav` | 16 kHz mono PCM16, about 115 MB per hour |
+| Job cache | app cache / `jobs/` | Cleared at startup and after a successful save |
+| Managed `yt-dlp` | app data / `bin/yt-dlp` | Installed from Settings; the system copy is untouched |
+| Models | the SDK model cache (`~/.cache/desert-ant-models` on Linux) and the webview cache | Downloaded on first use |
+
+The app data folder uses the bundle identifier `app.yttranscript.desktop`. Typical locations:
+
+- Linux: data in `~/.local/share/app.yttranscript.desktop`, cache in `~/.cache/app.yttranscript.desktop`
+- macOS: data in `~/Library/Application Support/app.yttranscript.desktop`, cache in `~/Library/Caches/app.yttranscript.desktop`
+- Windows: data in `%APPDATA%\app.yttranscript.desktop`, cache in `%LOCALAPPDATA%\app.yttranscript.desktop`
+
+The library survives restarts. The job cache does not. Audio is kept as the same uncompressed WAV used for transcription, so a one-hour recording takes roughly 115 MB. The library shows the size of each recording and the total.
+
+## Inputs and exports
+
+URLs: any `http` or `https` URL that `yt-dlp` can read as a single video. YouTube is the tested path. The app does not expand playlists and rejects live streams.
+
+Files: one local video or audio file with one of these extensions.
+
+- Video: `mp4`, `m4v`, `mov`, `mkv`, `webm`, `avi`, `mpg`, `mpeg`, `wmv`, `flv`, `ts`, `m2ts`, `3gp`, `3g2`, `ogv`
+- Audio: `mp3`, `m4a`, `m4b`, `wav`, `flac`, `ogg`, `oga`, `opus`, `aac`, `wma`, `aiff`, `aif`, `amr`, `au`, `caf`, `ac3`
+
+The original file is read in place and never modified. One job runs at a time.
+
+English is the only supported language for now. Voz can transcribe other languages, but the app has no language picker and does not detect the language.
+
+Exports:
+
+- SRT with `[Speaker 1]` prefixes.
+- VTT with `<v Speaker 1>` voice tags.
+- TXT with `[0:00] Speaker 1: text` passages, separated by a blank line.
+- Copy uses the TXT format.
+
+Speaker prefixes are omitted when speaker labeling is off. Caption cues split at sentence ends, with character and duration limits, rather than at fixed intervals.
+
+## Settings
+
+- **Speaker labeling** turns Who on or off. Off skips the model download and the diarization pass. The setting is stored in the webview's local storage.
+- **yt-dlp** shows the installed version, checks the latest GitHub release, and can download the official standalone binary into the app data folder. The system install is not modified.
+
+Settings apply to the next transcription. They are disabled while a job runs.
+
+## Privacy and network
+
+Audio never leaves the machine. Local files are read in place and never modified. The app has no accounts, API keys, analytics, or crash reporting.
+
+The network is used for:
+
+- The media host, through `yt-dlp`, when you transcribe a URL.
+- `github.com/yt-dlp/yt-dlp` when you check for or install a `yt-dlp` update.
+- `huggingface.co` and `cdn.jsdelivr.net` on first use, to download model files and the LiteRT runtime.
+- Desert Ant Labs' license server when a model loads. The request includes the model ID and revision, SDK version, platform, app ID, and a random installation ID. It does not include audio, text, or the transcript.
+
+Downloaded media lives in the job cache while a job runs. Finished audio moves to the library and stays there until you delete it. Models live in the SDK's cache (`~/.cache/desert-ant-models` on Linux) and the webview cache.
+
+Downloading videos from YouTube may violate its terms of service. Use this for content you have the right to process.
+
+## Limitations
+
+- English only, with no language detection or picker.
+- One video or file at a time. No queue. Playlists are not expanded, and live streams are rejected.
+- Speaker labels are best effort. Who numbers speakers in order of first appearance, and the transcript has four speaker colors that repeat after four. Short clips can split one voice into two.
+- The transcript text is read-only. You can rename speakers, but not edit words or rename a transcript.
+- Audio is stored as uncompressed 16 kHz mono WAV, about 115 MB per hour.
+- Filler words are kept. There is no filler-word removal pass.
+- Linux is tested. macOS and Windows builds have not been verified.
 
 ## Build a bundle
 
 ```bash
-npm run sidecar:prepare   # copies the current Node binary and prunes onnxruntime to this platform
-npm run tauri build
+npm run tauri:build
 ```
 
-`sidecar:prepare` copies `process.execPath` to `src-tauri/sidecar/node` and removes the other platforms' ONNX Runtime binaries. Tauri bundles `src-tauri/sidecar/**` and `src-tauri/resources/bin/*` as resources. Without the copied Node binary, the app falls back to `node` in `PATH`.
+The script runs `sidecar:prepare` first. That copies the current Node binary into `src-tauri/sidecar/` and removes the ONNX Runtime binaries for other platforms. Tauri then bundles `src-tauri/sidecar/**` and `src-tauri/resources/bin/*` as resources.
 
-Build on each target OS. The Node binary, ONNX Runtime, and the desktop libraries are platform-specific, so cross-compiling a release is not supported.
+Build on each target OS. The Node binary, ONNX Runtime, and desktop libraries are platform-specific, so cross-compiling a release is not supported.
 
-### Settings
-
-The gear button opens a drawer with two controls:
-
-- **Speaker labeling.** Turns Who on or off for the next transcription. Off skips the 32 MB model download and the diarization pass; SRT, VTT, and TXT exports then omit speaker prefixes.
-- **Update yt-dlp.** Checks the latest release on GitHub and shows **Up to date** or **Update available**. The button downloads the latest official standalone `yt-dlp` into the app data folder (`bin/yt-dlp` or `bin/yt-dlp.exe`) and prefers it over `PATH` and the bundled copy. The system install is not modified, so a pip- or package-managed `yt-dlp` is safe. The check and the update need network access to GitHub.
-
-### Library
-
-Finished transcripts and their audio are saved on this machine, in `library.db` and `library/` inside the app data folder. The **Library** button in the top bar lists them; the newest three also appear on the idle screen. Opening one restores the transcript, speaker labels and names, waveform, and player. Deleting a transcript deletes its audio too.
-
-Audio is kept as the 16 kHz mono WAV the transcriber used, about 115 MB per hour. A one-hour podcast is roughly 115 MB; the library drawer shows the size of each recording and the total.
+If `src-tauri/sidecar/node` is missing, the app falls back to `node` in `PATH`.
 
 ### Bundling yt-dlp and ffmpeg
 
 Put the binaries in `src-tauri/resources/bin/`:
 
-- Linux/macOS: `yt-dlp`, `ffmpeg`, `ffprobe`
+- Linux and macOS: `yt-dlp`, `ffmpeg`, `ffprobe`
 - Windows: `yt-dlp.exe`, `ffmpeg.exe`, `ffprobe.exe`
 
-Resolving order for `yt-dlp`: the app data copy from Settings, then `src-tauri/resources/bin/`, then `PATH`. For `ffmpeg`/`ffprobe`: the resources folder, then `PATH`. If you redistribute ffmpeg, check the license of the build you ship (LGPL vs GPL) and include the notices.
+Resolution order for `yt-dlp`: the app data copy from Settings, then `src-tauri/resources/bin/`, then `PATH`. For `ffmpeg` and `ffprobe`: the resources folder, then `PATH`.
 
-## Models and licenses
-
-The app code is MIT (see `LICENSE`). The models and SDKs are not:
-
-- **Voz** weights v0.5.0, SDK 4.2.0. Built on NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0).
-- **Who** v0.3.4. Built on Desert Ant Labs' own model.
-- Both are under the [Desert Ant Labs Source-Available License 1.0](https://license.desertant.com/1.0): free under 100,000 monthly active devices per model per platform, attribution required, commercial license above that.
-- On load, the SDK requests the current month's model license from Desert Ant Labs. It sends a random install id, the model id and revision, the SDK version, the platform, and the app id. It sends no audio, text, or transcript. Offline, the models still run.
-- The footer shows "Powered by Desert Ant Labs", which satisfies the attribution requirement.
-
-`yt-dlp` is Unlicense. `ffmpeg` is LGPL or GPL depending on the build.
-
-## Privacy
-
-The audio never leaves the machine. Local files are read in place and never uploaded. The network is used for:
-
-- YouTube, through `yt-dlp`, to fetch the audio
-- `github.com/yt-dlp/yt-dlp`, when you press Update yt-dlp in Settings
-- `huggingface.co` and `cdn.jsdelivr.net`, on first run, to download model files
-- Desert Ant Labs' license server, for the monthly model license request
-
-Downloaded audio lives in the app cache (`app_cache_dir/jobs`) while a job runs and is removed when the job finishes. Finished audio and transcripts move to the library in the app data folder (`library.db` and `library/`); they stay on this machine until you delete them. Model files live in `~/.cache/desert-ant-models` and the webview's cache.
-
-Downloading videos from YouTube may violate its terms of service. Use this for content you have the right to process.
-
-## Design
-
-The interface is a document surface: one paper ground, black ink, hairline
-rules, and colour reserved for the speaker labels. The chrome is set in
-[Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk), the
-transcript in [Source Serif 4](https://fonts.google.com/specimen/Source+Serif+4),
-and the timecodes in [Spline Sans Mono](https://fonts.google.com/specimen/Spline+Sans+Mono).
-All three are self-hosted in `public/fonts/` under the SIL Open Font License
-1.1, and the licence texts ship beside the font files.
+If you redistribute ffmpeg, check the license of the build you ship (LGPL or GPL) and include the notices.
 
 ## Development
 
 ```bash
 npm run build        # type-check and build the frontend
-npm test             # transcript merge and caption formatting
-cd src-tauri && cargo check
+npm test             # Vitest: transcript merge, captions, playback sync, WAV parsing
+cd src-tauri
+cargo test           # library, waveform, media server, and file checks
 ```
 
-The interesting frontend logic is in `src/lib/merge.ts`: assigning each word to whoever spoke it, grouping words into readable segments, and splitting captions. The Rust pipeline is in `src-tauri/src/lib.rs`.
+Project layout:
 
-## License
+```
+src/                 React UI, player, library, settings
+src/lib/             transcript model, captions, WAV parser, Who worker
+src-tauri/src/lib.rs Rust pipeline, SQLite library, media server
+src-tauri/sidecar/   Node bridge to Voz
+```
 
-MIT for this application. Model weights and the Desert Ant SDKs keep their own license, linked above.
+`src/lib/merge.ts` holds the transcript logic: assigning words to speakers, grouping them into passages, and splitting caption cues. `src-tauri/src/lib.rs` holds the pipeline and the library.
+
+The app writes to your real app data folder. For UI work, run it under Xvfb with isolated `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`; `AGENTS.md` has the commands.
+
+More context lives in `PRODUCT.md` (users, principles, constraints) and `DESIGN.md` (visual system, typography, components).
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Missing tools: ffmpeg + ffprobe" | Install them, or put the binaries in `src-tauri/resources/bin/`, then reopen Settings. |
+| "YouTube links need yt-dlp" | Install it from Settings, or put it in `PATH` or `src-tauri/resources/bin/`. Local files work without it. |
+| "Speaker labels unavailable" | The Who model or worker failed. The transcript is saved without labels. Check access to Hugging Face and jsDelivr, then transcribe again. |
+| "Playback unavailable" | On Linux, install the GStreamer base and good plugins. The transcript and exports still work. |
+| "The speech sidecar is missing" | Run `npm run sidecar:install` in development, or rebuild the bundle with `npm run tauri:build`. |
+| Model download fails | The first run needs access to Hugging Face and jsDelivr. Check the network and try again. |
+
+## Licenses and attribution
+
+The application code is MIT. See `LICENSE`.
+
+The models are [Voz](https://huggingface.co/desert-ant-labs/voz) and [Who](https://huggingface.co/desert-ant-labs/who). The Voz and Who SDKs are under the [Desert Ant Labs Source-Available License 1.0](https://license.desertant.com/1.0). The model weights they download are distributed under the same license unless a model card says otherwise. The license is free below 100,000 monthly active devices per model per platform. It requires attribution, and a commercial license is required above that threshold. It does not allow using the models or their outputs to train a competing on-device model.
+
+The footer text "Powered by Desert Ant Labs Voz and Who" satisfies the attribution requirement and must stay.
+
+`yt-dlp` is Unlicense. `ffmpeg` is LGPL or GPL depending on the build. The three interface fonts are self-hosted under the SIL Open Font License 1.1, with the license texts in `public/fonts/`.
