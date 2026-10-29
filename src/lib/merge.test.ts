@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCues,
+  isPunctuation,
   joinWords,
   mergeWords,
+  segmentIndexAt,
   speakerAt,
   toSrt,
   toTxt,
   toVtt,
+  wordIndexAt,
   type Turn,
   type Word,
 } from "./merge";
@@ -127,5 +130,31 @@ describe("captions", () => {
     const segments = mergeWords(words, []);
     expect(toTxt(segments)).toContain("[0:00] Hello there.");
     expect(toSrt(buildCues(segments))).not.toContain("Unknown speaker");
+  });
+});
+
+describe("playback sync", () => {
+  const segments = mergeWords(words, turns);
+
+  it("finds the segment that is being spoken", () => {
+    expect(segmentIndexAt([], 1)).toBe(-1);
+    expect(segmentIndexAt(segments, 0)).toBe(0);
+    expect(segmentIndexAt(segments, 0.5)).toBe(0);
+    expect(segmentIndexAt(segments, 1.5)).toBe(1);
+    expect(segmentIndexAt(segments, 99)).toBe(segments.length - 1);
+    expect(segmentIndexAt(segments, -1)).toBe(-1);
+  });
+
+  it("finds the word inside a segment, holding it through pauses", () => {
+    const segment = segments[0];
+    expect(wordIndexAt(segment, 0)).toBe(0);
+    expect(wordIndexAt(segment, 0.5)).toBe(1);
+    expect(wordIndexAt(segment, 1.1)).toBe(1);
+    expect(wordIndexAt(segment, -0.1)).toBe(-1);
+  });
+
+  it("does not put a space before punctuation", () => {
+    expect(isPunctuation(".")).toBe(true);
+    expect(isPunctuation("you?")).toBe(false);
   });
 });

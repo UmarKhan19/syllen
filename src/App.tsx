@@ -14,6 +14,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import {
   buildCues,
   formatClock,
+  isPunctuation,
   mergeWords,
   slugify,
   speakerLabel,
@@ -29,6 +30,7 @@ import type {
   TranscriptResult,
   UpdateResult,
 } from "./lib/types";
+import { PlayerBar, usePlayback } from "./player";
 
 type Phase = "idle" | "running" | "who" | "done" | "error";
 type ExportKind = "srt" | "vtt" | "txt";
@@ -107,6 +109,7 @@ export default function App() {
   const gearRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+  const playback = usePlayback(result, segments);
 
   const renameSpeaker = useCallback((speaker: number, name: string) => {
     setSpeakerNames((current) => ({ ...current, [speaker]: name }));
@@ -227,6 +230,27 @@ export default function App() {
     const timer = window.setTimeout(() => setNotice(null), 2600);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  const canSeek = playback.canSeek;
+  const togglePlayback = playback.toggle;
+  useEffect(() => {
+    if (!result || !canSeek || settingsOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, select, button, a, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      togglePlayback();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canSeek, result, settingsOpen, togglePlayback]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -600,11 +624,23 @@ export default function App() {
               </div>
             )}
 
+            {result.audioUrl && (
+              <PlayerBar
+                playback={playback}
+                peaks={result.waveform ?? []}
+                canFollow={segments.length > 0}
+              />
+            )}
+
             <Transcript
               segments={segments}
               fallback={result.text}
               speakerNames={speakerNames}
               onRename={renameSpeaker}
+              active={playback.active}
+              onSeek={playback.canSeek ? playback.playFrom : undefined}
+              follow={playback.follow}
+              onFollowOff={playback.stopFollowing}
             />
           </article>
         )}
@@ -774,16 +810,29 @@ const Transcript = memo(function Transcript({
   fallback,
   speakerNames,
   onRename,
+  active,
+  onSeek,
+  follow,
+  onFollowOff,
 }: {
   segments: Segment[];
   fallback: string;
   speakerNames: Record<number, string>;
   onRename: (speaker: number, name: string) => void;
+  active: { segment: number; word: number };
+  onSeek?: (seconds: number) => void;
+  follow: boolean;
+  onFollowOff: () => void;
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const returnFocusIndexRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useMemo(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
   const speakerCounts = useMemo(
     () =>
       segments.reduce<Record<number, number>>((counts, segment) => {
@@ -808,6 +857,52 @@ const Transcript = memo(function Transcript({
     }
   }, [editingIndex]);
 
+  useEffect(() => {
+    if (!follow || segments.length === 0 || active.segment < 0) return;
+    const element = containerRef.current?.querySelector<HTMLElement>(
+      `[data-para-index="${active.segment}"]`,
+    );
+    element?.scrollIntoView({
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [active.segment, follow, reduceMotion, segments.length]);
+
+  useEffect(() => {
+    if (!follow || segments.length === 0) return;
+    const stop = () => onFollowOff();
+    const onKey = (event: KeyboardEvent) => {
+      if (!["PageDown", "PageUp", "Home", "End"].includes(event.key)) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, button, canvas, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+      stop();
+    };
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchmove", stop, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [follow, onFollowOff, segments.length]);
+
+  const beginEdit = useCallback(
+    (index: number, label: string) => {
+      returnFocusIndexRef.current = index;
+      setDraftName(label);
+      setEditingIndex(index);
+      onFollowOff();
+    },
+    [onFollowOff],
+  );
+
   function closeEditor() {
     setEditingIndex(null);
   }
@@ -823,95 +918,194 @@ const Transcript = memo(function Transcript({
 
   if (segments.length === 0) {
     return (
-      <div className="transcript">
+      <div className="transcript" ref={containerRef}>
         <p className="plain">{fallback}</p>
       </div>
     );
   }
   const labelled = segments.some((segment) => segment.speaker !== null);
   return (
-    <div className={`transcript${labelled ? "" : " unlabelled"}`}>
+    <div
+      className={`transcript${labelled ? "" : " unlabelled"}${onSeek ? " seekable" : ""}`}
+      ref={containerRef}
+    >
       {segments.map((segment, index) => {
         const startsTurn =
           index === 0 || segment.speaker !== segments[index - 1].speaker;
         const speaker = segment.speaker;
         const label = speakerLabel(speaker, speakerNames);
         const editing = editingIndex === index && speaker !== null;
-        return (
-          <div
-            className={`para ${startsTurn ? "turn-start" : "turn-continue"}${editing ? " speaker-editing" : ""}`}
-            key={`${segment.start}-${index}`}
-          >
-            <span className="time">{formatClock(segment.start)}</span>
-            {startsTurn && speaker !== null ? (
-              editing ? (
-                <form
-                  className="speakerEdit"
-                  onSubmit={saveName}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      closeEditor();
-                    }
-                  }}
-                >
-                  <div className="speakerEditRow">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={draftName}
-                      onChange={(event) => setDraftName(event.target.value)}
-                      aria-label={`Name for ${label}`}
-                      maxLength={48}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <button
-                      type="submit"
-                      className="ghost speakerEditSave"
-                      disabled={!draftName.trim()}
-                    >
-                      Save
-                    </button>
-                    <button type="button" className="ghost" onClick={closeEditor}>
-                      Cancel
-                    </button>
-                  </div>
-                  <p className="speakerEditHint">
-                    Changes all {speakerCounts[speaker] ?? 0} transcript{" "}
-                    {(speakerCounts[speaker] ?? 0) === 1 ? "passage" : "passages"} and
-                    export labels.
-                  </p>
-                </form>
-              ) : (
-                <button
-                  type="button"
-                  className={`who ${speakerClass(speaker)} speakerName`}
-                  onClick={() => {
-                    returnFocusIndexRef.current = index;
-                    setDraftName(label);
-                    setEditingIndex(index);
-                  }}
-                  data-segment-index={index}
-                  aria-label={`Rename ${label}`}
-                  title={`Rename ${label}`}
-                >
-                  <span>{label}</span>
-                  <PencilIcon />
-                </button>
-              )
-            ) : (
-              <span className={`who ${speakerClass(speaker)}`} />
-            )}
-            <div className="speech">
-              <p>{segment.text}</p>
+
+        if (editing) {
+          return (
+            <div
+              className={`para ${startsTurn ? "turn-start" : "turn-continue"} speaker-editing${active.segment === index ? " current" : ""}`}
+              data-para-index={index}
+              key={`${segment.start}-${index}`}
+            >
+              <TimeCode start={segment.start} onSeek={onSeek} />
+              <form
+                className="speakerEdit"
+                onSubmit={saveName}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeEditor();
+                  }
+                }}
+              >
+                <div className="speakerEditRow">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                    aria-label={`Name for ${label}`}
+                    maxLength={48}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="submit"
+                    className="ghost speakerEditSave"
+                    disabled={!draftName.trim()}
+                  >
+                    Save
+                  </button>
+                  <button type="button" className="ghost" onClick={closeEditor}>
+                    Cancel
+                  </button>
+                </div>
+                <p className="speakerEditHint">
+                  Changes all {speakerCounts[speaker] ?? 0} transcript{" "}
+                  {(speakerCounts[speaker] ?? 0) === 1 ? "passage" : "passages"} and
+                  export labels.
+                </p>
+              </form>
+              <div className="speech">
+                <p>{segment.text}</p>
+              </div>
             </div>
-          </div>
+          );
+        }
+
+        return (
+          <Paragraph
+            key={`${segment.start}-${index}`}
+            segment={segment}
+            index={index}
+            startsTurn={startsTurn}
+            current={active.segment === index}
+            activeWord={active.segment === index ? active.word : -1}
+            label={label}
+            onSeek={onSeek}
+            onBeginEdit={beginEdit}
+          />
         );
       })}
     </div>
   );
 });
+
+const Paragraph = memo(function Paragraph({
+  segment,
+  index,
+  startsTurn,
+  current,
+  activeWord,
+  label,
+  onSeek,
+  onBeginEdit,
+}: {
+  segment: Segment;
+  index: number;
+  startsTurn: boolean;
+  current: boolean;
+  activeWord: number;
+  label: string;
+  onSeek?: (seconds: number) => void;
+  onBeginEdit: (index: number, label: string) => void;
+}) {
+  const speaker = segment.speaker;
+  return (
+    <div
+      className={`para ${startsTurn ? "turn-start" : "turn-continue"}${current ? " current" : ""}`}
+      data-para-index={index}
+      aria-current={current ? "true" : undefined}
+    >
+      <TimeCode start={segment.start} onSeek={onSeek} />
+      {startsTurn && speaker !== null ? (
+        <button
+          type="button"
+          className={`who ${speakerClass(speaker)} speakerName`}
+          onClick={() => onBeginEdit(index, label)}
+          data-segment-index={index}
+          aria-label={`Rename ${label}`}
+          title={`Rename ${label}`}
+        >
+          <span>{label}</span>
+          <PencilIcon />
+        </button>
+      ) : (
+        <span className={`who ${speakerClass(speaker)}`} />
+      )}
+      <div className="speech">
+        <p>
+          <span className="words">
+            {segment.words.map((word, wordIndex) => (
+              <span
+                key={`${word.start}-${wordIndex}`}
+                className={
+                  current && activeWord === wordIndex ? "word active" : "word"
+                }
+                onClick={
+                  onSeek
+                    ? (event) => {
+                        if (
+                          event.shiftKey ||
+                          event.metaKey ||
+                          event.ctrlKey ||
+                          event.altKey
+                        ) {
+                          return;
+                        }
+                        if (window.getSelection()?.isCollapsed === false) return;
+                        onSeek(word.start);
+                      }
+                    : undefined
+                }
+              >
+                {wordIndex > 0 && !isPunctuation(word.text) ? " " : null}
+                {word.text}
+              </span>
+            ))}
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+});
+
+function TimeCode({
+  start,
+  onSeek,
+}: {
+  start: number;
+  onSeek?: (seconds: number) => void;
+}) {
+  const text = formatClock(start);
+  if (!onSeek) return <span className="time">{text}</span>;
+  return (
+    <button
+      type="button"
+      className="time timeSeek"
+      onClick={() => onSeek(start)}
+      aria-label={`Play from ${text}`}
+    >
+      {text}
+    </button>
+  );
+}
 
 function PencilIcon() {
   return (

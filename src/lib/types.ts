@@ -13,6 +13,8 @@ export interface TranscriptResult {
   title: string;
   duration: number | null;
   audioPath: string;
+  audioUrl: string;
+  waveform: number[];
   text: string;
   words: Word[];
 }
