@@ -24,6 +24,11 @@ export interface JobError {
   message: string;
 }
 
+export interface FileInfo {
+  name: string;
+  size: number;
+}
+
 export interface ToolsStatus {
   ytDlp: boolean;
   ytDlpVersion: string | null;

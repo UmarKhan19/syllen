@@ -247,24 +247,45 @@ input {
   min-width: 0;
   display: flex;
   align-items: center;
+  height: 54px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.field:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(20, 22, 26, 0.12);
+}
+
+.field.dropping,
+.field.busy {
+  background: var(--wash);
+}
+
+.field.dropping {
+  border-color: var(--ink);
 }
 
 .fieldIcon {
   position: absolute;
   left: 16px;
+  display: flex;
   color: var(--ink-3);
   pointer-events: none;
 }
 
 .urlForm input {
-  width: 100%;
-  height: 54px;
-  padding: 0 16px 0 44px;
-  border: 1px solid var(--rule);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px 0 44px;
+  border: 0;
   border-radius: var(--radius);
-  background: var(--sheet);
+  background: transparent;
   font-size: 15px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .urlForm input::placeholder {
@@ -273,8 +294,135 @@ input {
 
 .urlForm input:focus {
   outline: none;
-  border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(20, 22, 26, 0.12);
+}
+
+.urlForm input:disabled {
+  color: var(--ink-3);
+}
+
+.fieldUpload {
+  height: 100%;
+  padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-left: 1px solid var(--rule);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fieldUpload svg {
+  color: var(--ink-3);
+}
+
+.fieldUpload:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.fieldUpload:hover:not(:disabled) svg {
+  color: var(--ink);
+}
+
+.fieldUpload:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.field.hasFile {
+  padding-left: 44px;
+  padding-right: 6px;
+}
+
+.fileName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.fileMeta {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.fieldChange {
+  height: 30px;
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fieldChange:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.fieldClear {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fieldClear:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.fieldChange:disabled,
+.fieldClear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dropHint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: var(--radius);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.dropHint svg {
+  color: var(--ink-3);
 }
 
 .urlForm .btn,
@@ -282,7 +430,7 @@ input {
   height: 54px;
 }
 
-.composer.compact .urlForm input,
+.composer.compact .field,
 .composer.compact .urlForm .btn,
 .composer.compact .urlForm .ghost {
   height: 44px;
@@ -290,6 +438,15 @@ input {
 
 .composer.compact .urlForm input {
   padding-left: 42px;
+}
+
+.composer.compact .field.hasFile {
+  padding-left: 42px;
+}
+
+.composer.compact .fieldUpload {
+  padding: 0 13px;
+  font-size: 12.5px;
 }
 
 /* Once a transcript is on screen the composer recedes: the output leads. */
@@ -303,11 +460,6 @@ input {
   background: var(--sheet);
   border-color: #cfcdc7;
   box-shadow: none;
-}
-
-.urlForm input:disabled {
-  color: var(--ink-3);
-  background: var(--wash);
 }
 
 .btn {
@@ -1508,6 +1660,10 @@ button.time:hover {
 
   .urlForm .btn {
     width: 100%;
+  }
+
+  .fileMeta {
+    display: none;
   }
 }
 

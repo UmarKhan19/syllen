@@ -10,7 +10,8 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
-import { save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   buildCues,
   formatClock,
@@ -24,6 +25,7 @@ import {
   type Segment,
 } from "./lib/merge";
 import type {
+  FileInfo,
   JobError,
   ProgressEvent,
   ToolsStatus,
@@ -35,23 +37,62 @@ import { PlayerBar, usePlayback } from "./player";
 type Phase = "idle" | "running" | "who" | "done" | "error";
 type ExportKind = "srt" | "vtt" | "txt";
 
-const STEPS = [
+const STEPS_URL = [
   { label: "Download", stages: ["metadata", "download"] },
   { label: "Prepare", stages: ["convert"] },
   { label: "Transcribe", stages: ["model", "transcribe"] },
   { label: "Speakers", stages: ["who"] },
 ];
 
+const STEPS_FILE = STEPS_URL.slice(1);
+
+const MEDIA_EXTENSIONS = [
+  "mp4", "m4v", "mov", "mkv", "webm", "avi", "mpg", "mpeg", "wmv", "flv",
+  "ts", "m2ts", "3gp", "3g2", "ogv", "mp3", "m4a", "m4b", "wav", "flac",
+  "ogg", "oga", "opus", "aac", "wma", "aiff", "aif", "amr", "au", "caf",
+  "ac3",
+];
+
+const MEDIA_FILTER = {
+  name: "Video and audio",
+  // GTK filters match case, and phone cameras write VIDEO.MP4.
+  extensions: MEDIA_EXTENSIONS.flatMap((ext) => [ext, ext.toUpperCase()]),
+};
+
 const HOW = [
-  { label: "Download", text: "yt-dlp fetches the audio track." },
+  {
+    label: "Bring audio",
+    text: "Paste a YouTube link or choose a local video or audio file.",
+  },
   { label: "Prepare", text: "ffmpeg rewrites it as 16 kHz mono." },
   { label: "Transcribe", text: "Voz turns the audio into timed words." },
   { label: "Speakers", text: "Who works out who said what." },
 ];
 
-function stepIndex(stage: string | null): number {
+function stepIndex(stage: string | null, steps: typeof STEPS_URL): number {
   if (!stage) return -1;
-  return STEPS.findIndex((step) => step.stages.includes(stage));
+  return steps.findIndex((step) => step.stages.includes(stage));
+}
+
+function normalizeUrl(value: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+function fileKind(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toUpperCase() : "FILE";
 }
 
 function stageLabel(stage: string | null): string {
@@ -75,6 +116,12 @@ function stageLabel(stage: string | null): string {
 
 export default function App() {
   const [url, setUrl] = useState("");
+  const [file, setFile] = useState<{
+    path: string;
+    name: string;
+    size: number;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [whoProgress, setWhoProgress] = useState<{
@@ -109,11 +156,76 @@ export default function App() {
   const gearRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const busyRef = useRef(false);
   const playback = usePlayback(result, segments);
 
   const renameSpeaker = useCallback((speaker: number, name: string) => {
     setSpeakerNames((current) => ({ ...current, [speaker]: name }));
   }, []);
+
+  const choosePath = useCallback(async (path: string) => {
+    try {
+      const info = await invoke<FileInfo>("file_info", { path });
+      setFile({ path, ...info });
+      setPrompt(null);
+      setError(null);
+      setPhase((current) => (current === "error" ? "idle" : current));
+      requestAnimationFrame(() => changeRef.current?.focus());
+    } catch (problem) {
+      setPrompt(String(problem));
+    }
+  }, []);
+
+  async function pickFile() {
+    if (busyRef.current) return;
+    try {
+      const path = await open({
+        multiple: false,
+        directory: false,
+        title: "Choose a video or audio file",
+        filters: [MEDIA_FILTER],
+      });
+      if (typeof path === "string") await choosePath(path);
+    } catch (problem) {
+      setPrompt(String(problem));
+    }
+  }
+
+  function clearFile() {
+    setFile(null);
+    setPrompt(null);
+    requestAnimationFrame(() => urlRef.current?.focus());
+  }
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === "enter" || payload.type === "over") {
+          if (!busyRef.current) setDragging(true);
+          return;
+        }
+        setDragging(false);
+        if (payload.type !== "drop" || busyRef.current) return;
+        if (payload.paths.length > 1) {
+          setNotice("One file at a time. Using the first.");
+        }
+        const path = payload.paths[0];
+        if (path) choosePath(path);
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [choosePath]);
 
   useEffect(() => {
     speakerLabelsRef.current = speakerLabels;
@@ -277,14 +389,18 @@ export default function App() {
   const missing = useMemo(() => {
     if (!tools) return [];
     return [
-      !tools.ytDlp && "yt-dlp",
       !(tools.ffmpeg && tools.ffprobe) && "ffmpeg + ffprobe",
       !tools.node && "Node.js",
       !tools.sidecar && "the speech sidecar (run npm run sidecar:install)",
     ].filter(Boolean) as string[];
   }, [tools]);
+  const ytDlpMissing = Boolean(tools && !tools.ytDlp);
 
   const busy = phase === "running" || phase === "who";
+  useEffect(() => {
+    busyRef.current = busy;
+    if (busy) setDragging(false);
+  }, [busy]);
   const installedYtDlp = tools?.ytDlpVersion ?? null;
   const upToDate = Boolean(
     installedYtDlp && latestYtDlp && installedYtDlp === latestYtDlp,
@@ -292,13 +408,13 @@ export default function App() {
   const hasUpdate = Boolean(
     installedYtDlp && latestYtDlp && installedYtDlp !== latestYtDlp,
   );
-  const steps = speakerLabels ? STEPS : STEPS.slice(0, 3);
+  const steps = (file ? STEPS_FILE : STEPS_URL).slice(0, speakerLabels ? 4 : 3);
   const currentStep =
     phase === "who"
       ? steps.length - 1
       : phase === "done"
         ? steps.length
-        : stepIndex(progress?.stage ?? null);
+        : stepIndex(progress?.stage ?? null, steps);
   const whoLabel =
     whoProgress?.phase === "diarize"
       ? "Labeling speakers"
@@ -329,8 +445,8 @@ export default function App() {
     event.preventDefault();
     const value = url.trim();
     if (busy) return;
-    if (!value) {
-      setPrompt("Paste a YouTube link to transcribe.");
+    if (!file && !value) {
+      setPrompt("Paste a YouTube link or choose a video or audio file.");
       urlRef.current?.focus();
       return;
     }
@@ -342,10 +458,17 @@ export default function App() {
     setSpeakerCount(null);
     setWhoError(null);
     setWhoProgress(null);
-    setProgress({ jobId: "", stage: "metadata", percent: null });
+    setProgress({
+      jobId: "",
+      stage: file ? "convert" : "metadata",
+      percent: null,
+    });
     setPhase("running");
     try {
-      await invoke("start_job", { url: value });
+      await invoke(
+        "start_job",
+        file ? { path: file.path } : { url: normalizeUrl(value) },
+      );
     } catch (problem) {
       setError(String(problem));
       setPhase("error");
@@ -462,32 +585,91 @@ export default function App() {
       <main className="shell main">
         {idle && (
           <section className="intro">
-            <h1 className="display">Transcribe a video.</h1>
+            <h1 className="display">Transcribe a video or audio file.</h1>
             <p className="lede">
-              Word-level timestamps and speaker labels, ready to copy or export.
+              Paste a YouTube link or upload a recording. Word-level timestamps
+              and speaker labels, ready to copy or export.
             </p>
           </section>
         )}
 
         <section className={`composer${idle ? "" : " compact"}`}>
           <form onSubmit={start} className="urlForm">
-            <div className="field">
-              <span className="fieldIcon">
-                <LinkIcon />
-              </span>
-              <input
-                ref={urlRef}
-                type="url"
-                value={url}
-                onChange={(event) => {
-                  setUrl(event.target.value);
-                  if (prompt) setPrompt(null);
-                }}
-                placeholder="https://www.youtube.com/watch?v=..."
-                disabled={busy}
-                aria-label="Video URL"
-                spellCheck={false}
-              />
+            <div
+              className={`field${file ? " hasFile" : ""}${
+                dragging ? " dropping" : ""
+              }${busy ? " busy" : ""}`}
+            >
+              {file ? (
+                <>
+                  <span className="fieldIcon">
+                    <AudioIcon />
+                  </span>
+                  <span className="fileName" title={file.path}>
+                    {file.name}
+                  </span>
+                  <span className="fileMeta">
+                    {fileKind(file.name)} · {formatBytes(file.size)}
+                  </span>
+                  <button
+                    ref={changeRef}
+                    type="button"
+                    className="fieldChange"
+                    onClick={pickFile}
+                    disabled={busy}
+                    aria-label="Change file"
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    className="fieldClear"
+                    onClick={clearFile}
+                    disabled={busy}
+                    aria-label="Remove file"
+                    title="Remove file"
+                  >
+                    <CloseIcon />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="fieldIcon">
+                    <LinkIcon />
+                  </span>
+                  <input
+                    ref={urlRef}
+                    type="text"
+                    inputMode="url"
+                    value={url}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      if (prompt) setPrompt(null);
+                    }}
+                    placeholder="Paste a YouTube link"
+                    disabled={busy}
+                    aria-label="YouTube URL"
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                  />
+                  <button
+                    type="button"
+                    className="fieldUpload"
+                    onClick={pickFile}
+                    disabled={busy}
+                  >
+                    <PaperclipIcon />
+                    Upload
+                  </button>
+                </>
+              )}
+              {dragging && (
+                <span className="dropHint">
+                  <AudioIcon />
+                  {file ? "Drop to replace the file" : "Drop to transcribe"}
+                </span>
+              )}
             </div>
             {phase === "running" ? (
               <button type="button" className="ghost" onClick={cancel}>
@@ -510,9 +692,9 @@ export default function App() {
           )}
           {!prompt && idle && (
             <p className="hint">
-              English only. The first run downloads a 350 MB speech model, plus a
-              32 MB speaker model when labelling is on. Audio is deleted on
-              exit.
+              {file
+                ? "Your file stays where it is. English only. The first run downloads a 350 MB speech model, plus a 32 MB speaker model when labelling is on. Temporary audio is deleted on exit."
+                : "Paste a link or choose a file. English only. The first run downloads a 350 MB speech model, plus a 32 MB speaker model when labelling is on. Downloaded audio is deleted on exit."}
             </p>
           )}
           {missing.length > 0 && (
@@ -521,8 +703,17 @@ export default function App() {
               <span>
                 <strong>Missing tools:</strong> {missing.join(", ")}. The app
                 looks in its app-data folder and{" "}
-                <code>src-tauri/resources/bin</code>, then in your PATH. yt-dlp
-                can also be installed from Settings.
+                <code>src-tauri/resources/bin</code>, then in your PATH.
+              </span>
+            </div>
+          )}
+          {ytDlpMissing && (
+            <div className="callout">
+              <InfoIcon />
+              <span>
+                <strong>YouTube links need yt-dlp.</strong> Install it from
+                Settings, or choose a video or audio file — file uploads do not
+                need it.
               </span>
             </div>
           )}
@@ -575,8 +766,9 @@ export default function App() {
               <strong>Something went wrong</strong>
               <span className="errorText">{error}</span>
               <span className="errorHelp">
-                Check the link and try again. If yt-dlp is missing, install it
-                from Settings.
+                {file
+                  ? "Check that the file is a readable video or audio recording and try again."
+                  : "Check the link and try again. If yt-dlp is missing, install it from Settings."}
               </span>
             </span>
           </section>
@@ -589,7 +781,7 @@ export default function App() {
                 <h2>{result.title}</h2>
                 <p className="meta">
                   {formatClock(result.duration ?? 0)}
-                  {speakerCount !== null && (
+                  {speakerCount !== null && speakerCount > 0 && (
                     <>
                       <span className="sep">·</span>
                       {speakerCount} speakers
@@ -1162,6 +1354,41 @@ function LinkIcon() {
     >
       <path d="M10.5 13.5a4.5 4.5 0 0 0 6.36 0l2.83-2.83a4.5 4.5 0 0 0-6.36-6.36l-1.3 1.3" />
       <path d="M13.5 10.5a4.5 4.5 0 0 0-6.36 0l-2.83 2.83a4.5 4.5 0 0 0 6.36 6.36l1.3-1.3" />
+    </svg>
+  );
+}
+
+function AudioIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M3 10.5v3M7 6.5v11M11 9v6M15 4.5v15M19 8.5v7M23 10.5v3" />
+    </svg>
+  );
+}
+
+function PaperclipIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m20.5 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
     </svg>
   );
 }
