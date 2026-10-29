@@ -141,7 +141,17 @@ input {
   display: flex;
   align-items: center;
   gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ink);
+  cursor: pointer;
+}
+
+.wordmark:hover .name {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .wordmark svg {
@@ -194,6 +204,58 @@ input {
   color: var(--ink);
   background: var(--sheet);
   border-color: #cfcdc7;
+}
+
+.libraryButton {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.libraryButton svg {
+  color: var(--ink-3);
+  transition: color 0.15s ease;
+}
+
+.libraryButton:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--sheet);
+  border-color: #cfcdc7;
+}
+
+.libraryButton:hover:not(:disabled) svg {
+  color: var(--ink);
+}
+
+.libraryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.libraryCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Page ─────────────────────────────────────────────────────────────── */
@@ -732,6 +794,24 @@ input {
   color: var(--rule);
 }
 
+.savedState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.savedState .pip {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  background: var(--ink-3);
+}
+
+.savedState.ok .pip {
+  background: var(--ok);
+}
+
 .toolbar {
   display: inline-flex;
   overflow: hidden;
@@ -1191,6 +1271,142 @@ button.time:hover {
   text-wrap: pretty;
 }
 
+/* ── Recent transcripts ───────────────────────────────────────────────── */
+
+.recent {
+  margin-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+
+.recentHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.recentHead h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.recentAll {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.recentAll:hover {
+  color: var(--ink);
+  text-decoration-style: solid;
+}
+
+.recentList {
+  position: relative;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recentList::before {
+  content: "";
+  position: absolute;
+  left: 154px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+
+.recentRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 154px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  padding: 13px 0;
+  border: 0;
+  border-top: 1px solid var(--rule-soft);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recentList li:first-child .recentRow {
+  border-top: 0;
+}
+
+.recentRow:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.recentWhen {
+  padding-right: 20px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.recentTitle {
+  padding-left: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: var(--ink);
+}
+
+.recentMeta {
+  padding-left: 18px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.recentMeta .sep {
+  margin: 0 6px;
+  color: var(--rule);
+}
+
+.recentRow svg {
+  justify-self: end;
+  color: var(--ink-3);
+  transition: color 0.15s ease;
+}
+
+.recentRow:hover:not(:disabled) .recentTitle {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.recentRow:hover:not(:disabled) svg {
+  color: var(--ink);
+}
+
 /* ── How it runs ──────────────────────────────────────────────────────── */
 
 .how {
@@ -1478,6 +1694,243 @@ button.time:hover {
   border-top: 1px solid var(--rule);
 }
 
+/* ── Library drawer ───────────────────────────────────────────────────── */
+
+.libraryDrawer {
+  width: min(480px, 100%);
+}
+
+.librarySummary {
+  margin: 5px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.librarySearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 2px 0 16px;
+}
+
+.librarySearch svg {
+  position: absolute;
+  left: 12px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.librarySearch input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px 0 35px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--sheet);
+  font-size: 13px;
+}
+
+.librarySearch input::placeholder {
+  color: var(--ink-3);
+}
+
+.librarySearch input:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(20, 22, 26, 0.12);
+}
+
+.libraryList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.libraryRow {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.libraryRow:last-child {
+  border-bottom: 0;
+}
+
+.libraryRow.opening {
+  opacity: 0.55;
+}
+
+.libraryOpen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 8px 14px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.libraryOpen:disabled {
+  cursor: default;
+}
+
+.libraryTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.libraryOpen:hover:not(:disabled) .libraryTitle {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.libraryMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.libraryMeta .sep {
+  margin: 0 6px;
+  color: var(--rule);
+}
+
+.libraryDelete {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.libraryRow:hover .libraryDelete,
+.libraryRow:focus-within .libraryDelete {
+  opacity: 1;
+}
+
+.libraryDelete:hover {
+  background: var(--alert-wash);
+  color: var(--alert);
+}
+
+.libraryConfirm {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 0 14px;
+}
+
+.libraryConfirm p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.libraryConfirm strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.libraryConfirmActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.libraryConfirm .danger {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--alert);
+  border-radius: var(--radius-sm);
+  background: var(--alert);
+  color: #fbfbf9;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.libraryConfirm .danger:hover:not(:disabled) {
+  background: #7f2419;
+  border-color: #7f2419;
+}
+
+.libraryConfirm .danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.libraryConfirm .ghost {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.libraryNote {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.libraryEmpty {
+  padding: 40px 18px 34px;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.libraryEmpty svg {
+  width: 26px;
+  height: 26px;
+  color: var(--ink-3);
+}
+
+.libraryEmpty strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.libraryEmpty p {
+  margin: 5px auto 0;
+  max-width: 32ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .ghost {
   height: 34px;
   padding: 0 14px;
@@ -1578,6 +2031,29 @@ button.time:hover {
   .para,
   .specimenRow {
     display: block;
+  }
+
+  .recentList::before {
+    display: none;
+  }
+
+  .recentRow {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    row-gap: 4px;
+  }
+
+  .recentWhen {
+    grid-column: 1 / -1;
+    padding: 0;
+    text-align: left;
+  }
+
+  .recentTitle {
+    padding-left: 0;
+  }
+
+  .recentMeta {
+    padding-left: 12px;
   }
 
   .transcript::before,

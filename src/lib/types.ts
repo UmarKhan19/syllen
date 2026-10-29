@@ -1,4 +1,4 @@
-import type { Word } from "./merge";
+import type { Segment, Word } from "./merge";
 
 export type Stage = "metadata" | "download" | "convert" | "model" | "transcribe" | "done";
 
@@ -17,6 +17,32 @@ export interface TranscriptResult {
   waveform: number[];
   text: string;
   words: Word[];
+  saved: boolean;
+}
+
+export interface LibraryItem {
+  id: string;
+  title: string;
+  createdAt: number;
+  duration: number | null;
+  wordCount: number;
+  speakerCount: number | null;
+  audioBytes: number;
+}
+
+export interface SavedTranscript {
+  id: string;
+  title: string;
+  createdAt: number;
+  duration: number | null;
+  audioPath: string;
+  audioUrl: string;
+  waveform: number[];
+  text: string;
+  words: Word[];
+  segments: Segment[] | null;
+  speakerCount: number | null;
+  speakerNames: Record<string, string>;
 }
 
 export interface JobError {
