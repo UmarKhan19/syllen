@@ -16,6 +16,12 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 const DAL_APP_ID: &str = "app.yttranscript.desktop";
 const MEDIA_ROUTE: &str = "/audio";
+// Keep in step with MEDIA_EXTENSIONS in src/App.tsx.
+const MEDIA_EXTENSIONS: &[&str] = &[
+    "mp4", "m4v", "mov", "mkv", "webm", "avi", "mpg", "mpeg", "wmv", "flv", "ts", "m2ts", "3gp",
+    "3g2", "ogv", "mp3", "m4a", "m4b", "wav", "flac", "ogg", "oga", "opus", "aac", "wma", "aiff",
+    "aif", "amr", "au", "caf", "ac3",
+];
 
 #[derive(Clone, Default)]
 struct JobControl {
@@ -223,6 +229,18 @@ struct ErrorEvent {
 #[derive(Serialize)]
 struct JobStarted {
     job_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileInfo {
+    name: String,
+    size: u64,
+}
+
+enum Source {
+    Url(String),
+    File(PathBuf),
 }
 
 #[derive(Serialize)]
@@ -683,16 +701,62 @@ async fn latest_yt_dlp_version() -> Result<String, String> {
     Ok(tag)
 }
 
+fn media_file(path: &Path) -> Result<FileInfo, String> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|_| "That file could not be read. Choose it again.".to_string())?;
+    if !metadata.is_file() {
+        return Err("Choose a video or audio file, not a folder.".into());
+    }
+    if metadata.len() == 0 {
+        return Err("That file is empty.".into());
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !MEDIA_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("That file type is not supported. Choose a video or audio file.".into());
+    }
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Recording")
+        .to_string();
+    Ok(FileInfo {
+        name,
+        size: metadata.len(),
+    })
+}
+
+#[tauri::command]
+fn file_info(path: String) -> Result<FileInfo, String> {
+    media_file(Path::new(&path))
+}
+
 #[tauri::command]
 fn start_job(
     app: AppHandle,
     state: State<'_, AppState>,
-    url: String,
+    url: Option<String>,
+    path: Option<String>,
 ) -> Result<JobStarted, String> {
-    let url = url.trim().to_string();
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err("Paste a full video URL starting with http:// or https://".into());
-    }
+    let source = match (url, path) {
+        (Some(url), None) => {
+            let url = url.trim().to_string();
+            let lower = url.to_ascii_lowercase();
+            if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+                return Err("Paste a full video URL starting with http:// or https://".into());
+            }
+            Source::Url(url)
+        }
+        (None, Some(path)) => {
+            let path = PathBuf::from(path);
+            media_file(&path)?;
+            Source::File(path)
+        }
+        _ => return Err("Choose a link or a file, not both.".into()),
+    };
     if state.control.running.swap(true, Ordering::SeqCst) {
         return Err("A job is already running.".into());
     }
@@ -724,7 +788,7 @@ fn start_job(
     let app_handle = app.clone();
     let thread_id = id.clone();
     std::thread::spawn(move || {
-        let outcome = run_pipeline(&app_handle, &control, &thread_id, &dir, &url);
+        let outcome = run_pipeline(&app_handle, &control, &thread_id, &dir, &source);
         if let Err(message) = outcome {
             if control.cancel.load(Ordering::SeqCst) {
                 emit_error(&app_handle, &thread_id, "Cancelled");
@@ -756,21 +820,35 @@ fn run_pipeline(
     control: &JobControl,
     id: &str,
     dir: &Path,
-    url: &str,
+    source: &Source,
 ) -> Result<(), String> {
     let tools = resolve_tools(app);
 
-    emit_progress(app, id, "metadata", None);
-    check_cancel(control)?;
-    let (title, metadata_duration) = fetch_metadata(&tools, url)?;
-    check_cancel(control)?;
+    let (title, metadata_duration, input) = match source {
+        Source::Url(url) => {
+            emit_progress(app, id, "metadata", None);
+            check_cancel(control)?;
+            let (title, duration) = fetch_metadata(&tools, url)?;
+            check_cancel(control)?;
 
-    emit_progress(app, id, "download", Some(0.0));
-    download(&tools, url, dir, app, id, control)?;
-    check_cancel(control)?;
+            emit_progress(app, id, "download", Some(0.0));
+            download(&tools, url, dir, app, id, control)?;
+            check_cancel(control)?;
+            (title, duration, dir.join("audio.wav"))
+        }
+        Source::File(path) => {
+            let title = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("Recording")
+                .to_string();
+            (title, None, path.clone())
+        }
+    };
 
     emit_progress(app, id, "convert", None);
-    let audio = convert(&tools, dir, control)?;
+    let audio = convert(&tools, &input, dir, control)?;
     check_cancel(control)?;
 
     let (text, words, audio_duration) = transcribe(&tools, &audio, app, id, control)?;
@@ -902,12 +980,16 @@ fn download(
     Ok(())
 }
 
-fn convert(tools: &Tools, dir: &Path, control: &JobControl) -> Result<PathBuf, String> {
-    let input = dir.join("audio.wav");
+fn convert(
+    tools: &Tools,
+    input: &Path,
+    dir: &Path,
+    control: &JobControl,
+) -> Result<PathBuf, String> {
     let output = dir.join("audio16.wav");
     let mut cmd = Command::new(&tools.ffmpeg);
     cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
-        .arg(&input)
+        .arg(input)
         .args(["-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le"])
         .arg(&output);
     let (status, stderr) = run_streaming(&mut cmd, control, &mut |_| {})?;
@@ -1076,6 +1158,7 @@ pub fn run() {
             check_tools,
             latest_yt_dlp_version,
             update_yt_dlp,
+            file_info,
             start_job,
             cancel_job,
             save_text
@@ -1170,6 +1253,23 @@ mod tests {
         assert_eq!(peaks.len(), 2);
         assert_eq!(peaks[0], (2000 * 255 / 32767) as u8);
         assert_eq!(peaks[1], (4000 * 255 / 32767) as u8);
+    }
+
+    #[test]
+    fn media_files_are_checked_before_a_job() {
+        let audio = temp_path("clip").with_extension("wav");
+        std::fs::write(&audio, wav_bytes(&[1i16; 4])).unwrap();
+        let info = media_file(&audio).unwrap();
+        assert_eq!(info.name, audio.file_name().unwrap().to_str().unwrap());
+        assert_eq!(info.size, 52);
+
+        let notes = temp_path("notes").with_extension("txt");
+        std::fs::write(&notes, b"hello").unwrap();
+        assert!(media_file(&notes).is_err());
+        assert!(media_file(&temp_path("missing").with_extension("mp3")).is_err());
+
+        let _ = std::fs::remove_file(&audio);
+        let _ = std::fs::remove_file(&notes);
     }
 
     #[test]
