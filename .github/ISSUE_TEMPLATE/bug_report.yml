@@ -1,0 +1,97 @@
+name: Bug report
+description: Something in the app is broken, crashes, or gives wrong output.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach private recordings or transcripts. Describe the content instead, for example "a 12 minute English interview with two speakers". Redact user names, file paths, and transcript text from logs.
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: The version you ran. In a source checkout it is in `package.json`; for a bundle, use the version in the installer or binary name.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: OS and architecture
+      placeholder: "Linux (Arch), x86_64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: input
+    attributes:
+      label: Input type
+      options:
+        - Local video file
+        - Local audio file
+        - URL (for example YouTube)
+        - No input; the app did not start or the library is broken
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: File extension or site host
+      description: For a file, its extension. For a URL, the site host only. Do not paste a private link.
+      placeholder: "mkv / youtube.com"
+
+  - type: dropdown
+    id: speakers
+    attributes:
+      label: Speaker labeling
+      options:
+        - "On"
+        - "Off"
+        - Did not reach that step
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest sequence that shows the problem, starting from a fresh launch.
+      placeholder: |
+        1. Launch the app
+        2. Choose ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Error text or log lines
+      description: Paste the message or the relevant terminal output. Remove paths, names, and transcript text first.
+      render: text
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This report contains no private media, transcript text, user names, or unredacted file paths.
+          required: true

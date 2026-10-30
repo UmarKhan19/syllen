@@ -14,7 +14,7 @@ Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview AP
 
 ## Requirements
 
-- Node.js 20 or newer and Rust 1.85 or newer.
+- Node.js 22.12 or newer and Rust 1.90 or newer. The pinned Tauri crates require it.
 - Tauri 2 prerequisites for your OS. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for package names.
 - `ffmpeg` and `ffprobe` in `PATH`, or in `src-tauri/resources/bin/`.
 - `yt-dlp` for YouTube links. It can live in `PATH`, in `src-tauri/resources/bin/`, or in the app data folder after an update from Settings. Local file jobs do not need it.
@@ -82,11 +82,11 @@ A few implementation choices shape the design:
 | Managed `yt-dlp` | app data / `bin/yt-dlp` | Installed from Settings; the system copy is untouched |
 | Models | the SDK model cache (`~/.cache/desert-ant-models` on Linux) and the webview cache | Downloaded on first use |
 
-The app data folder uses the bundle identifier `app.yttranscript.desktop`. Typical locations:
+The app data folder uses the bundle identifier `app.syllen.desktop`. Typical locations:
 
-- Linux: data in `~/.local/share/app.yttranscript.desktop`, cache in `~/.cache/app.yttranscript.desktop`
-- macOS: data in `~/Library/Application Support/app.yttranscript.desktop`, cache in `~/Library/Caches/app.yttranscript.desktop`
-- Windows: data in `%APPDATA%\app.yttranscript.desktop`, cache in `%LOCALAPPDATA%\app.yttranscript.desktop`
+- Linux: data in `~/.local/share/app.syllen.desktop`, cache in `~/.cache/app.syllen.desktop`
+- macOS: data in `~/Library/Application Support/app.syllen.desktop`, cache in `~/Library/Caches/app.syllen.desktop`
+- Windows: data in `%APPDATA%\app.syllen.desktop`, cache in `%LOCALAPPDATA%\app.syllen.desktop`
 
 The library survives restarts. The job cache does not. Audio is kept as the same uncompressed WAV used for transcription, so a one-hour recording takes roughly 115 MB. The library shows the size of each recording and the total.
 
@@ -192,6 +192,16 @@ src-tauri/sidecar/   Node bridge to Voz
 
 More context lives in `PRODUCT.md` (users, principles, constraints) and `DESIGN.md` (visual system, typography, components).
 
+## Support and status
+
+Syllen is at 0.1.0 with one maintainer. It is maintained in spare time, with no support contract, no guaranteed response time, and no promise that a given bug or platform gets fixed. Linux is the tested platform; Windows and macOS builds are unverified.
+
+Small, focused pull requests and bug reports are welcome. Open an issue before a larger change. Keep private media, transcripts, and personal data out of public reports.
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, checks, and what to include in a report.
+- [SECURITY.md](SECURITY.md): supported versions and the private advisory form.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): expectations and how to report conduct problems.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -212,3 +222,5 @@ The models are [Voz](https://huggingface.co/desert-ant-labs/voz) and [Who](https
 The footer text "Powered by Desert Ant Labs Voz and Who" satisfies the attribution requirement and must stay.
 
 `yt-dlp` is Unlicense. `ffmpeg` is LGPL or GPL depending on the build. The three interface fonts are self-hosted under the SIL Open Font License 1.1, with the license texts in `public/fonts/`.
+
+`npm run tauri:build` generates the Node.js and ONNX Runtime license notices during sidecar preparation and packages them with the sidecar resources. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
