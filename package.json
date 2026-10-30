@@ -2,6 +2,9 @@
   "name": "yt-transcript",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": "^22.12.0 || ^24 || >=26"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,9 +29,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "vite": "^8.0.16",
-    "vitest": "^4.0.0"
+    "vitest": "^5.0.5"
   },
   "description": "Local video and audio transcription with speaker labels",
   "license": "MIT"

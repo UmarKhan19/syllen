@@ -14,7 +14,7 @@ Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview AP
 
 ## Requirements
 
-- Node.js 22.12 or newer and Rust 1.90 or newer. The pinned Tauri crates require it.
+- Node.js 22 LTS is the tested default. Supported versions are 22.12 or newer in the 22.x line, 24.x, and 26 or newer. Node.js 23 and 25 are unsupported. Rust 1.90 or newer is required by the pinned Tauri crates.
 - Tauri 2 prerequisites for your OS. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for package names.
 - `ffmpeg` and `ffprobe` in `PATH`, or in `src-tauri/resources/bin/`.
 - `yt-dlp` for YouTube links. It can live in `PATH`, in `src-tauri/resources/bin/`, or in the app data folder after an update from Settings. Local file jobs do not need it.
@@ -28,6 +28,8 @@ npm install
 npm run sidecar:install
 npm run tauri dev
 ```
+
+Use Node.js 22 for development. With `nvm`, run `nvm install` and `nvm use` in the repository to select the version in `.nvmrc`.
 
 `sidecar:install` installs the Voz SDK and `onnxruntime-node` into `src-tauri/sidecar`. The sidecar's npm config skips lifecycle scripts on purpose. `onnxruntime-node`'s postinstall tries to resolve CUDA packages from NuGet and fails on many machines. The CPU binary it needs is already in the npm tarball.
 
