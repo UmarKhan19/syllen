@@ -24,6 +24,7 @@ import {
   toVtt,
   type Segment,
 } from "./lib/merge";
+import { makeSavedWhen } from "./lib/dateLabel";
 import type {
   FileInfo,
   JobError,
@@ -114,30 +115,6 @@ function stageLabel(stage: string | null): string {
     default:
       return "Working";
   }
-}
-
-function savedWhen(millis: number): string {
-  const date = new Date(millis);
-  if (Number.isNaN(date.getTime())) return "Saved";
-  const now = new Date();
-  const time = date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) {
-    return `Yesterday, ${time}`;
-  }
-  const day = date.toLocaleDateString([], { month: "short", day: "numeric" });
-  return date.getFullYear() === now.getFullYear()
-    ? `${day}, ${time}`
-    : date.toLocaleDateString([], {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
 }
 
 export default function App() {
@@ -762,6 +739,9 @@ export default function App() {
   const idle = phase === "idle" && !result;
   const hasLibrary = Boolean(library && library.length > 0);
   const recent = library?.slice(0, 3) ?? [];
+  // One label source per render: shared today/yesterday snapshot, formatters
+  // created only when a row actually asks for a label.
+  const savedWhen = makeSavedWhen(new Date());
   const trimmedQuery = query.trim().toLowerCase();
   const filteredLibrary =
     library?.filter((item) =>
