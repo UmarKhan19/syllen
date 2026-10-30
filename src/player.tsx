@@ -22,7 +22,6 @@ const WAVE_BAR = 2;
 export interface Playback {
   audio: HTMLAudioElement;
   playing: boolean;
-  time: number;
   duration: number;
   active: { segment: number; word: number };
   error: string | null;
@@ -55,11 +54,13 @@ export function usePlayback(
 ): Playback {
   const [audio] = useState(() => new Audio());
   const [playing, setPlaying] = useState(false);
-  const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(result?.duration ?? 0);
   const [active, setActive] = useState({ segment: -1, word: -1 });
   const [error, setError] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
+  // sync() runs on every animation frame; a ref skips no-op state updates so
+  // playback does not re-render the app between words.
+  const activeRef = useRef(active);
   const pendingSeek = useRef<number | null>(null);
   const audioUrl = result?.audioUrl ?? "";
 
@@ -67,11 +68,10 @@ export function usePlayback(
     (at: number) => {
       const segment = segmentIndexAt(segments, at);
       const word = segment >= 0 ? wordIndexAt(segments[segment], at) : -1;
-      setActive((current) =>
-        current.segment === segment && current.word === word
-          ? current
-          : { segment, word },
-      );
+      const current = activeRef.current;
+      if (current.segment === segment && current.word === word) return;
+      activeRef.current = { segment, word };
+      setActive(activeRef.current);
     },
     [segments],
   );
@@ -81,9 +81,9 @@ export function usePlayback(
     audio.preload = "metadata";
     audio.src = audioUrl;
     setError(null);
-    setTime(0);
     setDuration(result?.duration ?? 0);
-    setActive({ segment: -1, word: -1 });
+    activeRef.current = { segment: -1, word: -1 };
+    setActive(activeRef.current);
     setFollow(true);
     audio.load();
 
@@ -99,23 +99,19 @@ export function usePlayback(
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onTime = () => {
-      setTime(audio.currentTime);
       sync(audio.currentTime);
     };
     const onEnded = () => {
       setPlaying(false);
-      setTime(audio.duration || 0);
     };
     const onMetadata = () => {
       setDuration(audio.duration || result?.duration || 0);
       if (pendingSeek.current !== null) {
         audio.currentTime = pendingSeek.current;
-        setTime(pendingSeek.current);
         pendingSeek.current = null;
       }
     };
     const onSeeked = () => {
-      setTime(audio.currentTime);
       sync(audio.currentTime);
     };
     const onError = () => {
@@ -157,19 +153,21 @@ export function usePlayback(
     return () => cancelAnimationFrame(frame);
   }, [audio, playing, segments.length, sync]);
 
+  // The clock lives in PlayerBar. A seek started outside it (a transcript
+  // timestamp) must move the clock before the media element reports the jump.
   const seek = useCallback(
     (seconds: number) => {
       const limit = audio.duration || result?.duration || seconds;
       const target = Math.max(0, Math.min(seconds, limit));
       if (audio.readyState === 0) {
         pendingSeek.current = target;
-        setTime(target);
         sync(target);
+        announceSeek(audio, target);
         return;
       }
       audio.currentTime = target;
-      setTime(target);
       sync(target);
+      announceSeek(audio, target);
     },
     [audio, result?.duration, sync],
   );
@@ -203,7 +201,6 @@ export function usePlayback(
   return {
     audio,
     playing,
-    time,
     duration,
     active,
     error,
@@ -221,6 +218,12 @@ export function usePlayback(
 
 function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
+}
+
+const SEEK_EVENT = "ytt:seek";
+
+function announceSeek(audio: HTMLAudioElement, at: number) {
+  audio.dispatchEvent(new CustomEvent(SEEK_EVENT, { detail: at }));
 }
 
 function paintWave(
@@ -335,9 +338,10 @@ export function PlayerBar({
   const [hover, setHover] = useState<number | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [pointerFocus, setPointerFocus] = useState(false);
+  const [time, setTime] = useState(0);
   const scrubValue = useRef<number | null>(null);
   const resume = useRef(false);
-  const { audio, playing, time, duration, error } = playback;
+  const { audio, playing, duration, error } = playback;
 
   const colors = useMemo(() => {
     const styles = getComputedStyle(document.documentElement);
@@ -356,6 +360,20 @@ export function PlayerBar({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // The clock is local so a playing audio element does not re-render the app.
+  useEffect(() => {
+    const syncClock = () => setTime(audio.currentTime);
+    const onSeek = (event: Event) => setTime((event as CustomEvent<number>).detail);
+    const events = ["timeupdate", "ended", "seeked", "loadedmetadata", "emptied"];
+    for (const name of events) audio.addEventListener(name, syncClock);
+    audio.addEventListener(SEEK_EVENT, onSeek);
+    syncClock();
+    return () => {
+      for (const name of events) audio.removeEventListener(name, syncClock);
+      audio.removeEventListener(SEEK_EVENT, onSeek);
+    };
+  }, [audio]);
 
   const shown = scrub ?? time;
 
