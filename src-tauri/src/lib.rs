@@ -1,23 +1,28 @@
-use http_range::HttpRange;
-use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
+mod contracts;
+mod library;
+mod media;
+
+use contracts::{
+    ErrorEvent, FileInfo, JobResult, JobStarted, LibraryItem, ProgressEvent, SavedTranscript,
+    Segment, SidecarEvent, ToolsStatus, UpdateResult, Word,
+};
+use library::Library;
+use media::MediaServer;
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    net::{TcpListener, TcpStream},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 const DAL_APP_ID: &str = "app.yttranscript.desktop";
-const MEDIA_ROUTE: &str = "/audio";
 const YT_DLP_WAV_POSTPROCESSOR_ARGS: [&str; 2] = [
     "--postprocessor-args",
     "ExtractAudio+ffmpeg_o:-af aformat=sample_fmts=s16,aresample=16000 -ac 1 -ar 16000",
@@ -42,525 +47,9 @@ struct AppState {
     library: Option<Library>,
 }
 
-/// Transcripts and their audio live in the app data folder, not the job cache.
-/// One SQLite connection guarded by a mutex; jobs write at the end, the UI
-/// reads and deletes from the library.
-struct Library {
-    conn: Mutex<Connection>,
-    audio_dir: PathBuf,
-}
-
-impl Library {
-    fn open(app: &AppHandle) -> Result<Self, String> {
-        let data = app
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("No app data directory: {e}"))?;
-        Self::open_at(data.join("library.db"), data.join("library"))
-    }
-
-    fn open_at(database: PathBuf, audio_dir: PathBuf) -> Result<Self, String> {
-        std::fs::create_dir_all(&audio_dir)
-            .map_err(|e| format!("Could not create {}: {e}", audio_dir.display()))?;
-        let conn = Connection::open(&database)
-            .map_err(|e| format!("Could not open the transcript library: {e}"))?;
-        conn.busy_timeout(Duration::from_secs(5))
-            .map_err(|e| format!("Could not configure the transcript library: {e}"))?;
-        conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;
-             CREATE TABLE IF NOT EXISTS transcripts (
-                 id            TEXT PRIMARY KEY,
-                 title         TEXT NOT NULL,
-                 source_kind   TEXT NOT NULL,
-                 created_at    INTEGER NOT NULL,
-                 duration      REAL,
-                 text          TEXT NOT NULL,
-                 words         TEXT NOT NULL,
-                 word_count    INTEGER NOT NULL,
-                 segments      TEXT,
-                 speaker_count INTEGER,
-                 speaker_names TEXT NOT NULL DEFAULT '{}',
-                 waveform      BLOB NOT NULL,
-                 audio_file    TEXT NOT NULL,
-                 audio_bytes   INTEGER NOT NULL
-             );
-             CREATE INDEX IF NOT EXISTS transcripts_created
-                 ON transcripts (created_at DESC);",
-        )
-        .map_err(|e| format!("Could not prepare the transcript library: {e}"))?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-            audio_dir,
-        })
-    }
-
-    fn conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
-        self.conn
-            .lock()
-            .map_err(|_| "The transcript library is unavailable.".to_string())
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn save(
-        &self,
-        id: &str,
-        title: &str,
-        source_kind: &str,
-        duration: Option<f64>,
-        text: &str,
-        words: &[Word],
-        waveform: &[u8],
-        audio_file: &str,
-        audio_bytes: u64,
-    ) -> Result<(), String> {
-        let words_json =
-            serde_json::to_string(words).map_err(|e| format!("Could not save the words: {e}"))?;
-        let conn = self.conn()?;
-        conn.execute(
-            "INSERT INTO transcripts
-                 (id, title, source_kind, created_at, duration, text, words,
-                  word_count, waveform, audio_file, audio_bytes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![
-                id,
-                title,
-                source_kind,
-                now_millis() as i64,
-                duration,
-                text,
-                words_json,
-                words.len() as i64,
-                waveform,
-                audio_file,
-                audio_bytes as i64,
-            ],
-        )
-        .map_err(|e| format!("Could not save the transcript: {e}"))?;
-        Ok(())
-    }
-
-    fn list(&self) -> Result<Vec<LibraryItem>, String> {
-        let conn = self.conn()?;
-        let mut statement = conn
-            .prepare(
-                "SELECT id, title, created_at, duration, word_count,
-                        speaker_count, audio_bytes
-                 FROM transcripts
-                 ORDER BY created_at DESC",
-            )
-            .map_err(|e| format!("Could not read the library: {e}"))?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok(LibraryItem {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    created_at: row.get(2)?,
-                    duration: row.get(3)?,
-                    word_count: row.get(4)?,
-                    speaker_count: row.get(5)?,
-                    audio_bytes: row.get(6)?,
-                })
-            })
-            .map_err(|e| format!("Could not read the library: {e}"))?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Could not read the library: {e}"))
-    }
-
-    fn get(&self, id: &str) -> Result<SavedTranscript, String> {
-        let conn = self.conn()?;
-        let row = conn
-            .query_row(
-                "SELECT id, title, created_at, duration, text, words, segments,
-                        speaker_count, speaker_names, waveform, audio_file
-                 FROM transcripts WHERE id = ?1",
-                [id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, i64>(2)?,
-                        row.get::<_, Option<f64>>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, Option<String>>(6)?,
-                        row.get::<_, Option<i64>>(7)?,
-                        row.get::<_, String>(8)?,
-                        row.get::<_, Vec<u8>>(9)?,
-                        row.get::<_, String>(10)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(|e| format!("Could not read that transcript: {e}"))?;
-        let Some((
-            id,
-            title,
-            created_at,
-            duration,
-            text,
-            words,
-            segments,
-            speaker_count,
-            speaker_names,
-            waveform,
-            audio_file,
-        )) = row
-        else {
-            return Err("That transcript is no longer in the library.".into());
-        };
-        let words: Vec<Word> = serde_json::from_str(&words)
-            .map_err(|e| format!("The saved words are unreadable: {e}"))?;
-        let segments: Option<Vec<Segment>> = segments
-            .as_deref()
-            .map(serde_json::from_str)
-            .transpose()
-            .map_err(|e| format!("The saved speaker labels are unreadable: {e}"))?;
-        let speaker_names: HashMap<String, String> =
-            serde_json::from_str(&speaker_names).unwrap_or_default();
-        Ok(SavedTranscript {
-            id,
-            title,
-            created_at,
-            duration,
-            audio_path: self
-                .audio_dir
-                .join(audio_file)
-                .to_string_lossy()
-                .into_owned(),
-            audio_url: String::new(),
-            waveform,
-            text,
-            words,
-            segments,
-            speaker_count: speaker_count.map(|value| value as u32),
-            speaker_names,
-        })
-    }
-
-    fn update_analysis(
-        &self,
-        id: &str,
-        segments: &[Segment],
-        speaker_count: Option<u32>,
-    ) -> Result<(), String> {
-        let segments = serde_json::to_string(segments)
-            .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
-        let conn = self.conn()?;
-        conn.execute(
-            "UPDATE transcripts SET segments = ?2, speaker_count = ?3 WHERE id = ?1",
-            params![id, segments, speaker_count.map(|value| value as i64)],
-        )
-        .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
-        Ok(())
-    }
-
-    fn update_speaker_names(
-        &self,
-        id: &str,
-        names: &HashMap<String, String>,
-    ) -> Result<(), String> {
-        let names = serde_json::to_string(names)
-            .map_err(|e| format!("Could not save the speaker names: {e}"))?;
-        let conn = self.conn()?;
-        conn.execute(
-            "UPDATE transcripts SET speaker_names = ?2 WHERE id = ?1",
-            params![id, names],
-        )
-        .map_err(|e| format!("Could not save the speaker names: {e}"))?;
-        Ok(())
-    }
-
-    fn delete(&self, id: &str) -> Result<(), String> {
-        let audio_file: Option<String> = {
-            let conn = self.conn()?;
-            conn.query_row(
-                "SELECT audio_file FROM transcripts WHERE id = ?1",
-                [id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| format!("Could not read that transcript: {e}"))?
-        };
-        let Some(audio_file) = audio_file else {
-            return Err("That transcript is no longer in the library.".into());
-        };
-        match std::fs::remove_file(self.audio_dir.join(audio_file)) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("Could not delete the audio file: {error}")),
-        }
-        let conn = self.conn()?;
-        conn.execute("DELETE FROM transcripts WHERE id = ?1", [id])
-            .map_err(|e| format!("Could not delete the transcript: {e}"))?;
-        Ok(())
-    }
-}
-
-/// WebKitGTK refuses to play media from custom URI schemes, so the audio is
-/// served over loopback HTTP with byte ranges. One fixed path, loopback only.
-struct MediaServer {
-    port: u16,
-    current: Arc<Mutex<Option<PathBuf>>>,
-}
-
-impl MediaServer {
-    fn start() -> std::io::Result<Self> {
-        let listener = TcpListener::bind(("127.0.0.1", 0))?;
-        let port = listener.local_addr()?.port();
-        let current = Arc::new(Mutex::new(None));
-        let files = Arc::clone(&current);
-        std::thread::spawn(move || {
-            for stream in listener.incoming().flatten() {
-                let files = Arc::clone(&files);
-                std::thread::spawn(move || {
-                    let _ = serve_media(stream, &files);
-                });
-            }
-        });
-        Ok(Self { port, current })
-    }
-
-    fn serve(&self, path: &Path, job: &str) -> String {
-        if let Ok(mut current) = self.current.lock() {
-            *current = Some(path.to_path_buf());
-        }
-        format!("http://127.0.0.1:{}{MEDIA_ROUTE}?{job}", self.port)
-    }
-}
-
-fn serve_media(mut stream: TcpStream, files: &Mutex<Option<PathBuf>>) -> std::io::Result<()> {
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-
-    let mut head = Vec::with_capacity(1024);
-    let mut chunk = [0u8; 1024];
-    while head.len() < 16 * 1024 {
-        let read = stream.read(&mut chunk)?;
-        if read == 0 {
-            break;
-        }
-        head.extend_from_slice(&chunk[..read]);
-        if head.windows(4).any(|window| window == b"\r\n\r\n") {
-            break;
-        }
-    }
-
-    let head = String::from_utf8_lossy(&head);
-    let mut lines = head.lines();
-    let Some(request) = lines.next() else {
-        return write_error(&mut stream, 400, "Bad request", None);
-    };
-    let mut parts = request.split_whitespace();
-    let method = parts.next().unwrap_or_default();
-    let target = parts.next().unwrap_or_default();
-    if target.split('?').next().unwrap_or_default() != MEDIA_ROUTE {
-        return write_error(&mut stream, 404, "Not found", None);
-    }
-    if method != "GET" && method != "HEAD" {
-        return write_error(&mut stream, 405, "Method not allowed", None);
-    }
-
-    let path = files.lock().ok().and_then(|current| current.clone());
-    let Some(path) = path else {
-        return write_error(&mut stream, 404, "No audio for this job", None);
-    };
-    let mut file = match File::open(&path) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("media server: could not open {}: {error}", path.display());
-            return write_error(&mut stream, 404, "Audio file missing", None);
-        }
-    };
-    let len = file.metadata()?.len();
-    if len == 0 {
-        return write_error(&mut stream, 404, "Audio file is empty", None);
-    }
-
-    let mut range_header = None;
-    for line in head.lines().skip(1) {
-        if let Some((name, value)) = line.split_once(':')
-            && name.eq_ignore_ascii_case("range")
-        {
-            range_header = Some(value.trim());
-        }
-    }
-
-    let (status, start, end) = match range_header {
-        None => ("200 OK", 0, len - 1),
-        Some(header) => match HttpRange::parse(header, len) {
-            Ok(ranges) if ranges.len() == 1 => {
-                let range = ranges[0];
-                (
-                    "206 Partial Content",
-                    range.start,
-                    (range.start + range.length - 1).min(len - 1),
-                )
-            }
-            _ => {
-                return write_error(
-                    &mut stream,
-                    416,
-                    "Range not satisfiable",
-                    Some(&format!("bytes */{len}")),
-                );
-            }
-        },
-    };
-
-    let mut response = format!(
-        "HTTP/1.1 {status}\r\n\
-         Content-Type: audio/wav\r\n\
-         Accept-Ranges: bytes\r\n\
-         Content-Length: {}\r\n\
-         Cache-Control: no-store\r\n\
-         Connection: close\r\n",
-        end + 1 - start
-    );
-    if status.starts_with("206") {
-        response.push_str(&format!("Content-Range: bytes {start}-{end}/{len}\r\n"));
-    }
-    response.push_str("\r\n");
-    stream.write_all(response.as_bytes())?;
-
-    if method == "HEAD" {
-        return Ok(());
-    }
-
-    file.seek(SeekFrom::Start(start))?;
-    let mut writer = BufWriter::new(stream);
-    std::io::copy(&mut file.take(end + 1 - start), &mut writer)?;
-    writer.flush()
-}
-
-fn write_error(
-    stream: &mut TcpStream,
-    status: u16,
-    message: &str,
-    content_range: Option<&str>,
-) -> std::io::Result<()> {
-    let mut response = format!(
-        "HTTP/1.1 {status} {message}\r\n\
-         Content-Type: text/plain; charset=utf-8\r\n\
-         Content-Length: {}\r\n\
-         Connection: close\r\n",
-        message.len()
-    );
-    if let Some(range) = content_range {
-        response.push_str(&format!("Content-Range: {range}\r\n"));
-    }
-    response.push_str("\r\n");
-    response.push_str(message);
-    stream.write_all(response.as_bytes())
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct Word {
-    text: String,
-    start: f64,
-    end: f64,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ProgressEvent {
-    job_id: String,
-    stage: String,
-    percent: Option<f64>,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct JobResult {
-    job_id: String,
-    title: String,
-    duration: Option<f64>,
-    audio_path: String,
-    audio_url: String,
-    waveform: Vec<u8>,
-    text: String,
-    words: Vec<Word>,
-    saved: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct LibraryItem {
-    id: String,
-    title: String,
-    created_at: i64,
-    duration: Option<f64>,
-    word_count: i64,
-    speaker_count: Option<i64>,
-    audio_bytes: i64,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SavedTranscript {
-    id: String,
-    title: String,
-    created_at: i64,
-    duration: Option<f64>,
-    audio_path: String,
-    audio_url: String,
-    waveform: Vec<u8>,
-    text: String,
-    words: Vec<Word>,
-    segments: Option<Vec<Segment>>,
-    speaker_count: Option<u32>,
-    speaker_names: HashMap<String, String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct Segment {
-    speaker: Option<u32>,
-    start: f64,
-    end: f64,
-    text: String,
-    words: Vec<Word>,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ErrorEvent {
-    job_id: String,
-    message: String,
-}
-
-#[derive(Serialize)]
-struct JobStarted {
-    job_id: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FileInfo {
-    name: String,
-    size: u64,
-}
-
 enum Source {
     Url(String),
     File(PathBuf),
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ToolsStatus {
-    yt_dlp: bool,
-    yt_dlp_version: Option<String>,
-    ffmpeg: bool,
-    ffprobe: bool,
-    node: bool,
-    sidecar: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateResult {
-    ok: bool,
-    message: String,
-    version: Option<String>,
 }
 
 struct Tools {
@@ -568,24 +57,6 @@ struct Tools {
     yt_dlp: PathBuf,
     ffmpeg: PathBuf,
     sidecar: PathBuf,
-}
-
-#[derive(Deserialize)]
-struct SidecarEvent {
-    #[serde(rename = "type")]
-    kind: String,
-    #[serde(default)]
-    phase: Option<String>,
-    #[serde(default)]
-    fraction: Option<f64>,
-    #[serde(default)]
-    text: Option<String>,
-    #[serde(default)]
-    words: Option<Vec<Word>>,
-    #[serde(default)]
-    duration: Option<f64>,
-    #[serde(default)]
-    message: Option<String>,
 }
 
 fn now_millis() -> u128 {
@@ -1126,10 +597,7 @@ fn list_library(state: State<'_, AppState>) -> Result<Vec<LibraryItem>, String> 
 }
 
 #[tauri::command]
-fn load_transcript(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<SavedTranscript, String> {
+fn load_transcript(state: State<'_, AppState>, id: String) -> Result<SavedTranscript, String> {
     let library = state
         .library
         .as_ref()
@@ -1641,6 +1109,9 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::net::TcpStream;
+    use std::time::Duration;
 
     fn wav_bytes(samples: &[i16]) -> Vec<u8> {
         let data_len = (samples.len() * 2) as u32;
@@ -1806,7 +1277,9 @@ mod tests {
             text: "hello world".into(),
             words: sample_words(),
         }];
-        library.update_analysis("job-1", &segments, Some(2)).unwrap();
+        library
+            .update_analysis("job-1", &segments, Some(2))
+            .unwrap();
         library
             .update_speaker_names(
                 "job-1",
@@ -1817,7 +1290,10 @@ mod tests {
         let saved = library.get("job-1").unwrap();
         assert_eq!(saved.segments.unwrap()[0].speaker, Some(1));
         assert_eq!(saved.speaker_count, Some(2));
-        assert_eq!(saved.speaker_names.get("1").map(String::as_str), Some("Ada"));
+        assert_eq!(
+            saved.speaker_names.get("1").map(String::as_str),
+            Some("Ada")
+        );
 
         library.delete("job-1").unwrap();
         assert!(!audio.exists());
