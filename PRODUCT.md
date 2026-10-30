@@ -81,7 +81,7 @@ never leaves it, and the output knows who said what.
 
 ## Brand Commitments
 
-- Name: **YT Transcript** (productName and window title in
+- Name: **Syllen** (productName and window title in
   `src-tauri/tauri.conf.json`).
 - Voice: plain, factual, tool-like. The existing copy names the action
   ("Transcribe", "Update yt-dlp") and states facts (model sizes, deletion,

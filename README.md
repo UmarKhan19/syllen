@@ -1,6 +1,6 @@
-# YT Transcript
+# Syllen
 
-YT Transcript turns a YouTube link or a local video or audio file into a speaker-labeled transcript with word-level timestamps. Speech recognition and speaker labeling run on your machine. Finished transcripts and their audio stay in a local library, and no audio or transcript is uploaded to a transcription service.
+Syllen turns a YouTube link or a local video or audio file into a speaker-labeled transcript with word-level timestamps. Speech recognition and speaker labeling run on your machine. Finished transcripts and their audio stay in a local library, and no audio or transcript is uploaded to a transcription service.
 
 Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview APIs and Node SDK but have not been verified on those systems.
 

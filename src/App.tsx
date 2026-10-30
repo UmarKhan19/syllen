@@ -756,11 +756,11 @@ export default function App() {
             type="button"
             className="wordmark"
             onClick={goHome}
-            aria-label="YT Transcript home"
+            aria-label="Syllen home"
             title="Home"
           >
             <MarkIcon />
-            <span className="name">YT Transcript</span>
+            <span className="name">Syllen</span>
           </button>
           <div className="topbarRight">
             <span className="privacyNote">

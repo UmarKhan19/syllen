@@ -1,6 +1,6 @@
 # DESIGN
 
-YT Transcript's visual world: a document surface for spoken words.
+Syllen's visual world: a document surface for spoken words.
 
 ## World statement
 

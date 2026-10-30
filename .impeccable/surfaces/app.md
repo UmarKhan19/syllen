@@ -1,4 +1,4 @@
-# Surface brief — YT Transcript (app shell)
+# Surface brief — Syllen (app shell)
 
 ## Scope and mode
 
