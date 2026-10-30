@@ -18,6 +18,10 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 const DAL_APP_ID: &str = "app.yttranscript.desktop";
 const MEDIA_ROUTE: &str = "/audio";
+const YT_DLP_WAV_POSTPROCESSOR_ARGS: [&str; 2] = [
+    "--postprocessor-args",
+    "ExtractAudio+ffmpeg_o:-af aformat=sample_fmts=s16,aresample=16000 -ac 1 -ar 16000",
+];
 // Keep in step with MEDIA_EXTENSIONS in src/App.tsx.
 const MEDIA_EXTENSIONS: &[&str] = &[
     "mp4", "m4v", "mov", "mkv", "webm", "avi", "mpg", "mpeg", "wmv", "flv", "ts", "m2ts", "3gp",
@@ -1391,6 +1395,7 @@ fn download(
         "--audio-format",
         "wav",
     ]);
+    cmd.args(YT_DLP_WAV_POSTPROCESSOR_ARGS);
     prepend_tool_path(&mut cmd, tools);
     cmd.arg("-o").arg(&template).arg(url);
 
@@ -1726,6 +1731,16 @@ mod tests {
 
         let _ = std::fs::remove_file(&audio);
         let _ = std::fs::remove_file(&notes);
+    }
+
+    #[test]
+    fn yt_dlp_wav_filter_preserves_pcm16_before_resampling() {
+        assert_eq!(YT_DLP_WAV_POSTPROCESSOR_ARGS[0], "--postprocessor-args");
+        assert!(YT_DLP_WAV_POSTPROCESSOR_ARGS[1].starts_with("ExtractAudio+ffmpeg_o:-af "));
+        assert!(
+            YT_DLP_WAV_POSTPROCESSOR_ARGS[1].contains("aformat=sample_fmts=s16,aresample=16000")
+        );
+        assert!(YT_DLP_WAV_POSTPROCESSOR_ARGS[1].ends_with("-ac 1 -ar 16000"));
     }
 
     fn sample_words() -> Vec<Word> {
