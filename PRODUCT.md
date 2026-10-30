@@ -99,8 +99,9 @@ never leaves it, and the output knows who said what.
   `Cue`, plus the caption formatters.
 - `src/App.tsx` — the single screen: composer, pipeline, result, settings
   drawer, export actions.
-- `src-tauri/src/lib.rs` — the Rust pipeline, the SQLite library, and the job
-  event contract.
+- `src-tauri/src/` holds the Rust core: `lib.rs` (pipeline, commands, job events),
+  `library.rs` (SQLite library), `contracts.rs` (wire types), and `media.rs` (audio
+  server).
 - No screenshots, testimonials, benchmarks, or press. The app is young and
   private; future work must not invent them.
 

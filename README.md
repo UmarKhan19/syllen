@@ -170,8 +170,8 @@ If you redistribute ffmpeg, check the license of the build you ship (LGPL or GPL
 ## Development
 
 ```bash
-npm run build        # type-check and build the frontend
-npm test             # Vitest: transcript merge, captions, playback sync, WAV parsing
+npm run build        # tsc typecheck, then vite build
+npm test             # Vitest: merge, captions, playback sync, WAV parsing, date labels
 cd src-tauri
 cargo test           # library, waveform, media server, and file checks
 ```
@@ -179,15 +179,16 @@ cargo test           # library, waveform, media server, and file checks
 Project layout:
 
 ```
-src/                 React UI, player, library, settings
-src/lib/             transcript model, captions, WAV parser, Who worker
-src-tauri/src/lib.rs Rust pipeline, SQLite library, media server
+src/                 App coordinator, transcript view, player, styles
+src/lib/             pure helpers: merge and captions, WAV parsing, Who worker, date labels, types
+src-tauri/src/       lib.rs (commands, tools, job lifecycle), library.rs (SQLite and audio),
+                     media.rs (loopback audio server), contracts.rs (wire types)
 src-tauri/sidecar/   Node bridge to Voz
 ```
 
-`src/lib/merge.ts` holds the transcript logic: assigning words to speakers, grouping them into passages, and splitting caption cues. `src-tauri/src/lib.rs` holds the pipeline and the library.
+`src/lib/merge.ts` holds the transcript logic: assigning words to speakers, grouping them into passages, and splitting caption cues. `src-tauri/src/lib.rs` runs the pipeline; `library.rs` stores transcripts and their audio.
 
-The app writes to your real app data folder. For UI work, run it under Xvfb with isolated `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`; `AGENTS.md` has the commands.
+`AGENTS.md` maps file ownership, the TypeScript/Rust and sidecar contracts, and the verification commands. The app writes to your real app data folder. For UI work, run it under Xvfb with isolated `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`; `AGENTS.md` has the commands.
 
 More context lives in `PRODUCT.md` (users, principles, constraints) and `DESIGN.md` (visual system, typography, components).
 
