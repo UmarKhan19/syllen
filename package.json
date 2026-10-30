@@ -2,6 +2,9 @@
   "name": "yt-transcript",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": "^22.12.0 || ^24 || >=26"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
