@@ -7,9 +7,11 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  readFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeNotices } from "./sidecar-notices.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const sidecar = join(root, "src-tauri", "sidecar");
@@ -19,6 +21,11 @@ if (!existsSync(join(modules, "@desert-ant-labs", "voz"))) {
   console.error("Install the sidecar first: npm run sidecar:install");
   process.exit(1);
 }
+
+const onnxPackage = JSON.parse(
+  readFileSync(join(modules, "onnxruntime-node", "package.json"), "utf8"),
+);
+await writeNotices(join(sidecar, "notices"), process.versions.node, onnxPackage.version, { root });
 
 const nodeName = process.platform === "win32" ? "node.exe" : "node";
 const nodeTarget = join(sidecar, nodeName);

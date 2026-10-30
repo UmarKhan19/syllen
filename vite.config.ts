@@ -10,6 +10,7 @@ export default defineConfig(() => ({
   optimizeDeps: { include: ["@desert-ant-labs/who", "@litertjs/core"] },
   build: {
     target: "esnext",
+    license: { fileName: "licenses/frontend-dependencies.json" },
   },
   // The Who worker is loaded from a classic worker stub so LiteRT can use
   // importScripts; its bundle must stay ESM because Who has top-level await.

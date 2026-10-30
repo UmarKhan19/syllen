@@ -4,6 +4,7 @@ src-tauri/target/
 src-tauri/sidecar/node
 src-tauri/sidecar/node.exe
 src-tauri/sidecar/node_modules/
+src-tauri/sidecar/notices/
 src-tauri/resources/bin/*
 !src-tauri/resources/bin/.gitkeep
 *.log
