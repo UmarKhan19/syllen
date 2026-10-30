@@ -22,7 +22,7 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
-const DAL_APP_ID: &str = "app.yttranscript.desktop";
+const DAL_APP_ID: &str = "app.syllen.desktop";
 const YT_DLP_WAV_POSTPROCESSOR_ARGS: [&str; 2] = [
     "--postprocessor-args",
     "ExtractAudio+ffmpeg_o:-af aformat=sample_fmts=s16,aresample=16000 -ac 1 -ar 16000",
