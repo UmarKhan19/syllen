@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mergeWords } from "./lib/transcript";
-import { toTxt } from "./lib/captions";
+import { formatClock, toTxt } from "./lib/captions";
 import { makeSavedWhen } from "./features/library/date-label";
 import { formatBytes } from "./lib/format-bytes";
 import type { FileInfo, LibraryItem } from "./lib/wire-types";
@@ -188,7 +188,6 @@ export default function App() {
 }
 
 function ExampleOutput() { return <section className="relative mt-10.5 border-t border-rule pt-4.5"><p className="mt-0 mb-4 text-label tracking-caps uppercase text-ink-3">Example output</p><div className="relative before:absolute before:inset-y-0 before:left-margin before:w-px before:bg-rule before:content-[''] compact:before:hidden">{[["0:00", "Speaker 1", "Good evening, and welcome to the show."], ["0:05", "Speaker 2", "Thanks for having me. Where should we start?"], ["0:12", "Speaker 1", "Let us start with the question you came to ask."]].map(([time, speaker, text], i) => <div key={time} className="grid grid-cols-[58px_96px_minmax(0,1fr)] items-start not-first:mt-3.5 compact:block"><span className="pt-1.75 pr-5 text-right font-mono text-[11.5px] text-ink-3 tabular-nums compact:inline-block compact:pt-0 compact:pr-3 compact:text-left">{time}</span><span className={`pt-2 pr-5 text-label font-bold tracking-label uppercase ${i === 1 ? "text-pen-2" : "text-pen-1"} compact:inline-block compact:pt-0 compact:pr-3 compact:text-left`}>{speaker}</span><p className="m-0 max-w-[68ch] pl-5 font-text text-prose text-speech text-pretty compact:mt-1.5 compact:pl-0">{text}</p></div>)}</div></section>; }
-function formatClock(value: number) { const total = Math.floor(value); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`; }
 function MarkIcon() { return <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" aria-hidden="true"><rect x="2.75" y="2.75" width="12.5" height="12.5" rx="2.25" /><path d="M5.75 6.75h6.5M5.75 9.25h6.5M5.75 11.75h3.5" /></svg>; }
 function GearIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>; }
 function ChevronIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>; }

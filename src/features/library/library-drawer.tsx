@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LibraryItem } from "../../lib/wire-types";
 import { formatBytes } from "../../lib/format-bytes";
+import { formatClock } from "../../lib/captions";
 import { AlertIcon, CloseIcon, LibraryIcon } from "../../icons";
 
 const FINE = "text-fine leading-[1.6] text-ink-3";
 const ALERT = "mt-4.5 flex gap-2.75 rounded-card border border-alert-line bg-alert-wash px-4 py-3.25 text-small leading-[1.6] text-ink-2 [&_svg]:mt-0.5 [&_svg]:shrink-0 [&_svg]:basis-4 [&_strong]:font-semibold [&_svg]:text-alert [&_strong]:text-alert";
 const GHOST = "cursor-pointer rounded-control border border-rule bg-transparent py-0 text-ink-2 transition-colors duration-150 ease-[ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-45";
-
-function formatClock(value: number) { const total = Math.floor(value); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`; }
 
 export function LibraryDrawer({ open, items, error, openingId, deletingId, deleteBusy, savedWhen, onClose, onOpen, onDelete, onCancelDelete, onConfirmDelete, closeRef }: { open: boolean; items: LibraryItem[] | null; error: string | null; openingId: string | null; deletingId: string | null; deleteBusy: boolean; savedWhen: (millis: number) => string; onClose: () => void; onOpen: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; onCancelDelete: () => void; onConfirmDelete: (item: LibraryItem) => void; closeRef: React.RefObject<HTMLButtonElement | null> }) {
   const [query, setQuery] = useState("");

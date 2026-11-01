@@ -2,11 +2,11 @@ import { useState, type RefObject } from "react";
 import type { Playback } from "../playback/use-playback";
 import type { Segment, Word } from "../../lib/transcript";
 import type { TranscriptResult } from "../../lib/wire-types";
+import { formatClock } from "../../lib/captions";
 import { PlayerBar } from "../playback/player-bar";
 import { Transcript } from "./transcript";
 import { AlertIcon } from "../../icons";
 
-function formatClock(value: number) { const total = Math.floor(value); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`; }
 export function TranscriptWorkspace({ result, segments, speakerCount, whoError, speakerNames, wordEditing, canEditWords, playback, onCopy, onExport, onRename, onSaveWords, onEditStateChange, editButtonRef, toolbarCancelRef, toolbarSaveRef, titleRef }: { result: TranscriptResult; segments: Segment[]; speakerCount: number | null; whoError: string | null; speakerNames: Record<number, string>; wordEditing: boolean; canEditWords: boolean; playback: Playback; onCopy: () => void; onExport: (kind: "srt" | "vtt" | "txt") => void; onRename: (speaker: number, name: string) => void; onSaveWords: (expected: Word[], words: Word[], segments: Segment[]) => Promise<void>; onEditStateChange: (editing: boolean, saving?: boolean, dirty?: boolean) => void; editButtonRef: RefObject<HTMLButtonElement | null>; toolbarCancelRef: RefObject<HTMLButtonElement | null>; toolbarSaveRef: RefObject<HTMLButtonElement | null>; titleRef: RefObject<HTMLHeadingElement | null> }) {
   const [actionHost, setActionHost] = useState<HTMLDivElement | null>(null);
   const [errorHost, setErrorHost] = useState<HTMLDivElement | null>(null);

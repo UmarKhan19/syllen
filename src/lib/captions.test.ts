@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCues, toSrt, toTxt, toVtt } from "./captions";
+import { buildCues, formatClock, toSrt, toTxt, toVtt } from "./captions";
 import { mergeWords, type Word } from "./transcript";
 
 const words: Word[] = [
@@ -12,6 +12,17 @@ const words: Word[] = [
 const turns = [{ speaker: 0, start: 0, end: 1.0 }, { speaker: 1, start: 1.2, end: 2.5 }];
 
 describe("captions", () => {
+  it.each([
+    [59.9, "0:59"],
+    [60, "1:00"],
+    [3599.9, "59:59"],
+    [3600, "1:00:00"],
+    [3900, "1:05:00"],
+    [-1, "0:00"],
+  ])("formats %s seconds as %s", (seconds, expected) => {
+    expect(formatClock(seconds)).toBe(expected);
+  });
+
   it("splits long runs into cues and writes SRT", () => {
     const long = Array.from({ length: 40 }, (_, index) => ({ text: `word${index}`, start: index * 0.5, end: index * 0.5 + 0.4 }));
     const cues = buildCues(mergeWords(long, [{ speaker: 0, start: 0, end: 30 }]));
