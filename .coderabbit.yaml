@@ -19,8 +19,9 @@ reviews:
       instructions: |
         library.rs owns the SQLite schema and there is no migration runner, so a schema change
         without a tested migration that keeps existing rows readable is a bug.
-        Job lifecycle: one job at a time, check_cancel between stages, and jobs/ is cleaned up
-        only after the audio moves into the library.
+        Job lifecycle: one job at a time and check_cancel between stages. A successful pipeline
+        cleans jobs/ only after the audio moves into the library, but a pipeline error removes it,
+        and startup or exit cleanup clears jobs/ even when no audio was moved.
   auto_review:
     drafts: false
 
