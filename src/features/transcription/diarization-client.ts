@@ -1,6 +1,6 @@
-import type { Turn } from "./merge";
-import type { WhoMessage, WhoPhase } from "./who-protocol";
-import workerUrl from "./who-worker.ts?worker&url";
+import type { Turn } from "../../lib/transcript";
+import type { WhoMessage, WhoPhase } from "./diarization-protocol";
+import workerUrl from "./diarization-worker.ts?worker&url";
 
 export interface Diarization {
   speakerCount: number;

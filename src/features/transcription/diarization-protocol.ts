@@ -1,4 +1,4 @@
-import type { Turn } from "./merge";
+import type { Turn } from "../../lib/transcript";
 
 export type WhoPhase = "model" | "diarize";
 

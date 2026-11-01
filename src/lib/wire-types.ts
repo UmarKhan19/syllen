@@ -1,4 +1,4 @@
-import type { Segment, Word } from "./merge";
+import type { Segment, Word } from "./transcript";
 
 export type Stage = "metadata" | "download" | "convert" | "model" | "transcribe" | "done";
 
