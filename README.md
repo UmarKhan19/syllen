@@ -7,7 +7,7 @@ Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview AP
 ## Features
 
 - Speaker-labeled transcript with word timestamps at 80 ms resolution.
-- Local library in SQLite. Reopen a transcript, rename its speakers, export it, or delete it with its audio.
+- Local library in SQLite. Reopen a transcript, correct words, rename its speakers, export it, or delete it with its audio.
 - Waveform playback with click-to-seek. The transcript follows the current passage and word, and following can be turned off.
 - Export as SRT, VTT, or TXT, or copy the transcript to the clipboard.
 - Speaker labeling can be switched off to skip the 32 MB speaker model and the diarization pass.
@@ -40,8 +40,8 @@ On first use, Voz downloads about 350 MB and Who about 32 MB. Both are cached fo
 1. Paste a URL, choose a file with Upload, or drop a file on the window.
 2. Select Transcribe. Link jobs show Download, Prepare, Transcribe, and, when labeling is on, Speakers. File jobs start at Prepare.
 3. Cancel stops the download, conversion, or transcription. Speaker labeling runs in a background worker and cannot be cancelled once it starts, but the window stays responsive.
-4. When the job finishes, the player and transcript appear. Click a timecode or a word to seek. Click a speaker name to rename it; the name applies to every passage and every export.
-5. Use Copy, SRT, VTT, or TXT. The Library button lists saved transcripts, and the newest three also appear on the idle screen.
+4. When the job finishes, the player and transcript appear. Click a timecode or a word to seek. Click a speaker name to rename it; the name applies to every passage and every export. Use the pencil **Edit words** control in the sticky reading-tools rail above the player, select a word, and correct it in the anchored popover. Enter applies a correction; Escape discards that word's draft. Save or cancel the session from the same rail.
+5. Use Copy, SRT, VTT, or TXT in the sticky rail above the player. The Library button lists saved transcripts, and the newest three also appear on the idle screen.
 
 ## How it works
 
@@ -141,7 +141,7 @@ Downloading videos from YouTube may violate its terms of service. Use this for c
 - English only, with no language detection or picker.
 - One video or file at a time. No queue. Playlists are not expanded, and live streams are rejected.
 - Speaker labels are best effort. Who numbers speakers in order of first appearance, and the transcript has four speaker colors that repeat after four. Short clips can split one voice into two.
-- The transcript text is read-only. You can rename speakers, but not edit words or rename a transcript.
+- Word text can be corrected in saved transcripts. Each correction keeps the selected token's original time interval; phrase corrections do not create subword timing. Timing itself and transcript titles cannot be edited.
 - Audio is stored as uncompressed 16 kHz mono WAV, about 115 MB per hour.
 - Filler words are kept. There is no filler-word removal pass.
 - Linux is tested. macOS and Windows builds have not been verified.
