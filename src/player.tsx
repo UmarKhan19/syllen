@@ -466,10 +466,13 @@ export function PlayerBar({
       : 0;
 
   return (
-    <section className="player" aria-label="Audio player">
+    <section
+      className="sticky top-bar z-10 mt-1 flex h-bar items-center gap-3.5 border-b border-rule bg-paper"
+      aria-label="Audio player"
+    >
       <button
         type="button"
-        className="playButton"
+        className="grid size-icon shrink-0 basis-icon cursor-pointer place-items-center rounded-full border border-ink bg-ink p-0 text-on-ink transition-[background,border-color,opacity] duration-150 ease-[ease] enabled:hover:border-ink-deep enabled:hover:bg-ink-deep disabled:cursor-not-allowed disabled:opacity-35"
         onClick={playback.toggle}
         disabled={Boolean(error) || !playback.canSeek}
         aria-label={playing ? "Pause" : "Play"}
@@ -478,24 +481,41 @@ export function PlayerBar({
       </button>
 
       {error ? (
-        <p className="playerError" role="status" title={error}>
+        <p
+          className="m-0 flex items-center gap-2.5 whitespace-nowrap text-meta text-ink-2"
+          role="status"
+          title={error}
+        >
           Playback unavailable
-          <button type="button" className="playerRetry" onClick={playback.retry}>
+          <button
+            type="button"
+            className="cursor-pointer border-0 bg-transparent p-0 text-fine font-semibold text-ink underline decoration-dotted decoration-1 underline-offset-3 hover:decoration-solid"
+            onClick={playback.retry}
+          >
             Retry
           </button>
         </p>
       ) : (
-        <span className="clock" aria-hidden="true">
-          <span className="clockNow">{formatClock(shown)}</span>
-          <span className="clockSep">/</span>
-          <span className="clockTotal">{formatClock(duration)}</span>
+        <span
+          className="inline-flex flex-none items-baseline gap-1.25 whitespace-nowrap font-mono text-[11.5px] tabular-nums text-ink-3"
+          aria-hidden="true"
+        >
+          <span className="min-w-[5ch] text-right text-ink">
+            {formatClock(shown)}
+          </span>
+          <span className="text-rule">/</span>
+          <span className="min-w-[4ch]">{formatClock(duration)}</span>
         </span>
       )}
 
-      <div className="wave" ref={wrapRef}>
+      <div className="relative min-w-20 flex-1" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          className={`waveCanvas${pointerFocus ? " pointer" : ""}`}
+          className={`block w-full touch-none ${
+            playback.canSeek
+              ? "cursor-pointer active:cursor-ew-resize"
+              : "cursor-default"
+          }${pointerFocus ? " focus-visible:outline-none" : ""}`}
           style={{ height: WAVE_HEIGHT }}
           role="slider"
           tabIndex={0}
@@ -514,7 +534,10 @@ export function PlayerBar({
           onKeyDown={onCanvasKey}
         />
         {tip !== null && (
-          <span className="waveTip" style={{ left: tipLeft }}>
+          <span
+            className="pointer-events-none absolute -top-3.25 -translate-x-1/2 rounded-[4px] bg-ink px-1.5 pt-px pb-0.5 font-mono text-micro leading-[1.35] tabular-nums whitespace-nowrap text-paper"
+            style={{ left: tipLeft }}
+          >
             {formatClock(tip)}
           </span>
         )}
@@ -523,7 +546,11 @@ export function PlayerBar({
       {canFollow && (
         <button
           type="button"
-          className={`followButton${playback.follow ? " on" : ""}`}
+          className={`inline-flex h-7.5 w-26.5 shrink-0 basis-26.5 cursor-pointer items-center justify-center gap-1.5 rounded-control border px-2.5 py-0 text-[11.5px] tracking-[0.01em] transition-[color,background,border-color] duration-150 ease-[ease] ${
+            playback.follow
+              ? "border-transparent bg-transparent text-ink-3 hover:bg-wash hover:text-ink"
+              : "border-rule bg-sheet text-ink hover:border-rule-strong"
+          }`}
           onClick={
             playback.follow ? playback.stopFollowing : playback.followTranscript
           }
