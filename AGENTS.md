@@ -23,6 +23,8 @@ no models, network, sidecar install, or app launch.
 | `src/App.tsx` | App coordinator: state, every `invoke` and `listen` call, job progress, settings, library and export actions |
 | `src/transcript.tsx` | Transcript rendering, paragraphs, timecodes, inline speaker rename |
 | `src/player.tsx` | Playback bar, waveform, seek |
+| `src/wordCorrectionPopover.tsx` | Anchored word-correction popover; positions against the `data-app-topbar` and `data-reading-dock` elements |
+| `src/lib/wordCorrectionPosition.ts` | Popover placement math, pure |
 | `src/lib/merge.ts` | Word-to-speaker merge, passages, caption cues, SRT/VTT/TXT export |
 | `src/lib/wav.ts` | WAV to Float32 samples for Who |
 | `src/lib/who.ts`, `who-worker.ts`, `who-protocol.ts` | Diarization worker and its messages |
@@ -52,11 +54,14 @@ arbitrary fragmentation and generic wrappers.
 - Tauri commands are the IPC surface: `check_tools`, `latest_yt_dlp_version`,
   `update_yt_dlp`, `file_info`, `start_job`, `cancel_job`, `save_text`,
   `list_library`, `load_transcript`, `delete_transcript`, `save_analysis`,
-  `save_speaker_names`. Register a new one in `generate_handler!` in `lib.rs` and call
-  it from `App.tsx`.
+  `save_speaker_names`, `save_word_corrections`. Register a new one in
+  `generate_handler!` in `lib.rs` and call it from `App.tsx`.
 - Events: `job:progress`, `job:error`, `job:result`. Their payloads are
   `ProgressEvent`, `ErrorEvent`, and `JobResult` in `contracts.rs`; `App.tsx` listens
   for them.
+- Chrome geometry is measured, not styled: the popover reads `data-app-topbar` on the
+  App header and `data-reading-dock` on the dock, so those attributes must survive any
+  markup change.
 - Sidecar protocol: one process per job, one JSON object per stdout line with
   `type: "progress" | "result" | "error"`. `SidecarEvent` in `contracts.rs` parses it
   and `server.mjs` writes it.

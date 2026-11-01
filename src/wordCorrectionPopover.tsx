@@ -55,9 +55,9 @@ export function WordCorrectionPopover({
       }
       return;
     }
-    const topbar = document.querySelector<HTMLElement>(".topbar")?.getBoundingClientRect();
+    const topbar = document.querySelector<HTMLElement>("[data-app-topbar]")?.getBoundingClientRect();
     const readingDock = document
-      .querySelector<HTMLElement>(".readingDock")
+      .querySelector<HTMLElement>("[data-reading-dock]")
       ?.getBoundingClientRect();
     const topInset = Math.max(
       topbar?.bottom ?? 0,
@@ -122,7 +122,7 @@ export function WordCorrectionPopover({
     const observer = new ResizeObserver(updatePosition);
     observer.observe(anchor);
     observer.observe(popover);
-    const readingDock = document.querySelector<HTMLElement>(".readingDock");
+    const readingDock = document.querySelector<HTMLElement>("[data-reading-dock]");
     if (readingDock) observer.observe(readingDock);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
@@ -196,7 +196,7 @@ export function WordCorrectionPopover({
   return createPortal(
     <div
       ref={popoverRef}
-      className="wordCorrectionPopover"
+      className="fixed z-50 grid w-[min(400px,calc(100vw_-_16px))] gap-3 overflow-y-auto rounded-control border border-rule bg-sheet px-3 pt-15 pb-3 text-ink shadow-word-correction"
       role="dialog"
       aria-modal="false"
       aria-label={`Correct ${label}`}
@@ -209,7 +209,7 @@ export function WordCorrectionPopover({
     >
       <input
         ref={inputRef}
-        className="wordCorrectionInput"
+        className="w-full max-w-full min-h-10 box-border wrap-anywhere rounded-[5px] border border-rule bg-paper px-2.5 py-1.75 font-ui text-[16px] leading-[1.5] text-ink shadow-none appearance-none focus:border-transparent focus:outline-2 focus:outline-offset-2 focus:outline-ink"
         value={value}
         aria-label={`Correct ${label}`}
         aria-invalid={Boolean(error)}
@@ -227,7 +227,7 @@ export function WordCorrectionPopover({
       <button
         ref={closeButtonRef}
         type="button"
-        className="iconButton wordCorrectionClose"
+        className="absolute top-3 right-3 grid size-8 shrink-0 basis-8 cursor-pointer place-items-center rounded-control border border-rule bg-transparent p-0 text-ink-2 transition-[color,background,border-color] duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink"
         data-word-correction-action="close"
         aria-label="Close word editor"
         onPointerDown={() => { suppressBlurRef.current = true; }}
@@ -247,13 +247,19 @@ export function WordCorrectionPopover({
           <path d="M18 6 6 18M6 6l12 12" />
         </svg>
       </button>
-      <span id="word-correction-popover-hint" className="wordCorrectionPopoverHint">
-        <span><kbd>Enter</kbd> applies</span>
-        <span aria-hidden="true" className="wordCorrectionHintDivider">·</span>
-        <span><kbd>Esc</kbd> restores</span>
+      <span
+        id="word-correction-popover-hint"
+        className="flex items-center gap-1.75 font-ui text-fine leading-[1.35] text-ink-2"
+      >
+        <span><kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Enter</kbd> applies</span>
+        <span aria-hidden="true" className="text-rule">·</span>
+        <span><kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Esc</kbd> restores</span>
       </span>
       {error && (
-        <span id="word-correction-popover-error" className="wordCorrectionError">
+        <span
+          id="word-correction-popover-error"
+          className="block wrap-anywhere text-fine leading-[1.4] text-alert"
+        >
           {error}
         </span>
       )}
