@@ -112,10 +112,10 @@ and `font-mono`.
 - Card radii: 12px (`rounded-card`); small controls: 9px (`rounded-control`);
   square inline Change, Clear, and Delete buttons at 30-32px: 7px
   (`rounded-inline`)
-- Sticky chrome: 58px topbar, 58px player directly below it; transcript paragraphs carry `scroll-margin-top: 128px` so a followed passage never hides under them
+- Sticky chrome: 58px topbar, then the reading dock (38px tools rail over the 58px player) sticky below it; transcript paragraphs carry `scroll-margin-top: 164px` so a followed passage never hides under them
 - Transcript paragraph: ruled left margin, 58px timecode column, 96px speaker column, speech column at 68ch with 20px stand-off from the margin rule
 - Continuation ticks: hairline between turn-continue paragraphs
-- Shadow: single soft float shadow on the drawers only (`--shadow-float`); no drop shadows elsewhere
+- Shadow: a soft float shadow on the drawers (`--shadow-float`) and on the word-correction popover (`--shadow-word-correction`); no drop shadows elsewhere
 - Drawers: 420px for Settings, 480px for the Library, both full-height from the right
 
 ## Colour discipline
@@ -162,7 +162,8 @@ Overlay fade-in and toast rise are state transitions, not decoration. Respects
 - **composer** — URL field with chain glyph and an inline Upload action; a chosen file becomes a chip with name, format, size, Change and remove. Dropping a file on the window does the same. Ink-filled primary action on the idle screen.
 - **pipeline** — Four named stages with ink-filled done markers, mono percent, ink fill rail.
 - **transcript** — Ruled left margin, timecode + speaker name in margin, speech set beside.
-- **player** — Sticky under the topbar: ink play button, mono clock, waveform seek bar with a hover time tag, and a quiet Follow toggle. No card, no shadow; a bottom hairline separates it from the text.
+- **player** — Sits in the sticky reading dock under the topbar: ink play button, mono clock, waveform seek bar with a hover time tag, and a quiet Follow toggle. No card, no shadow; a bottom hairline separates it from the text.
+- **reading dock** — The sticky block above the transcript: a 38px tools rail (Copy, SRT, VTT, TXT, and the pencil Edit words control) over the player. Word editing turns the rail into Cancel and Save changes, and each word becomes an inline target that opens an anchored popover.
 - **recent** — Idle-screen shelf for the newest three transcripts, on the transcript's own 154px ruled margin: mono date in the margin, title in grotesk, duration and size in mono. Replaces the example specimen once real work exists.
 - **library drawer** — Right-hand drawer, 480px: mono summary (count and total audio size), search once there are more than five, ruled rows with title, date, duration, speakers, and size, a quiet trash action, and an inline delete confirmation. The footer states where the files live.
 - **saved marker** — The result meta ends with a green-pip "Saved locally" (or "Not saved") so persistence is stated, not implied.

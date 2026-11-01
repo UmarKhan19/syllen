@@ -648,6 +648,23 @@ fn save_speaker_names(
         .update_speaker_names(&id, &names)
 }
 
+#[tauri::command]
+fn save_word_corrections(
+    state: State<'_, AppState>,
+    id: String,
+    expected_words: Vec<Word>,
+    words: Vec<Word>,
+) -> Result<(), String> {
+    if id.trim().is_empty() || id.len() > 128 {
+        return Err("The transcript identifier is invalid.".into());
+    }
+    state
+        .library
+        .as_ref()
+        .ok_or_else(|| "The transcript library is not available.".to_string())?
+        .update_words(&id, &expected_words, &words)
+}
+
 fn persist_audio(source: &Path, audio_dir: &Path, id: &str) -> Result<(PathBuf, u64), String> {
     // shortcut: library audio is the 16 kHz mono WAV (about 115 MB/hour);
     // compress it when libraries get large.
@@ -1090,7 +1107,8 @@ pub fn run() {
             load_transcript,
             delete_transcript,
             save_analysis,
-            save_speaker_names
+            save_speaker_names,
+            save_word_corrections
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app");
@@ -1300,6 +1318,208 @@ mod tests {
         assert!(library.list().unwrap().is_empty());
         assert!(library.get("job-1").is_err());
 
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn word_corrections_update_all_text_atomically_and_preserve_saved_metadata() {
+        let base = temp_path("word-corrections");
+        let audio_dir = base.join("library");
+        let library = Library::open_at(base.join("library.db"), audio_dir.clone()).unwrap();
+        let words = sample_words();
+        library
+            .save(
+                "correct-me",
+                "Interview",
+                "file",
+                Some(12.0),
+                "hello world",
+                &words,
+                &[4, 5],
+                "correct-me.wav",
+                9,
+            )
+            .unwrap();
+        let original_segments = vec![Segment {
+            speaker: Some(1),
+            start: 0.0,
+            end: 0.9,
+            text: "hello world".into(),
+            words: words.clone(),
+        }];
+        library
+            .update_analysis("correct-me", &original_segments, Some(2))
+            .unwrap();
+        library
+            .update_speaker_names("correct-me", &HashMap::from([("1".into(), "Ada".into())]))
+            .unwrap();
+
+        let mut corrected = words.clone();
+        corrected[0].text = "Hello,".into();
+        corrected[1].text = "dear listener.".into();
+        library
+            .update_words("correct-me", &words, &corrected)
+            .unwrap();
+        let saved = library.get("correct-me").unwrap();
+        assert_eq!(saved.text, "Hello, dear listener.");
+        assert_eq!(saved.words, corrected);
+        let segments = saved.segments.unwrap();
+        assert_eq!(segments[0].text, saved.text);
+        assert_eq!(segments[0].speaker, Some(1));
+        assert_eq!(segments[0].start, original_segments[0].start);
+        assert_eq!(segments[0].end, original_segments[0].end);
+        assert_eq!(segments[0].words[0].start, words[0].start);
+        assert_eq!(segments[0].words[1].end, words[1].end);
+        assert_eq!(saved.speaker_count, Some(2));
+        assert_eq!(
+            saved.speaker_names.get("1").map(String::as_str),
+            Some("Ada")
+        );
+        assert_eq!(saved.waveform, vec![4, 5]);
+        assert_eq!(library.list().unwrap()[0].word_count, 2);
+
+        let mut stale = words.clone();
+        stale[1].text = "world!".into();
+        assert!(library.update_words("correct-me", &words, &stale).is_err());
+        let after_stale = library.get("correct-me").unwrap();
+        assert_eq!(after_stale.words, corrected);
+        assert_eq!(after_stale.text, "Hello, dear listener.");
+        assert!(
+            library
+                .update_analysis("correct-me", &original_segments, Some(2))
+                .is_err()
+        );
+        assert_eq!(library.get("correct-me").unwrap().words, corrected);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn word_corrections_keep_the_flat_word_index_inside_two_saved_segments() {
+        let base = temp_path("word-correction-segments");
+        let audio_dir = base.join("library");
+        let library = Library::open_at(base.join("library.db"), audio_dir).unwrap();
+        let words = vec![
+            Word {
+                text: "Hello".into(),
+                start: 0.0,
+                end: 0.4,
+            },
+            Word {
+                text: "there.".into(),
+                start: 0.4,
+                end: 0.9,
+            },
+            Word {
+                text: "café".into(),
+                start: 1.0,
+                end: 1.3,
+            },
+            Word {
+                text: "today?".into(),
+                start: 1.3,
+                end: 1.8,
+            },
+        ];
+        library
+            .save(
+                "two-segments",
+                "Two segments",
+                "file",
+                Some(2.0),
+                "Hello there. café today?",
+                &words,
+                &[1],
+                "two-segments.wav",
+                1,
+            )
+            .unwrap();
+        let original_segments = vec![
+            Segment {
+                speaker: Some(0),
+                start: 0.0,
+                end: 0.9,
+                text: "Hello there.".into(),
+                words: words[..2].to_vec(),
+            },
+            Segment {
+                speaker: Some(1),
+                start: 1.0,
+                end: 1.8,
+                text: "café today?".into(),
+                words: words[2..].to_vec(),
+            },
+        ];
+        library
+            .update_analysis("two-segments", &original_segments, Some(2))
+            .unwrap();
+        let mut corrected = words.clone();
+        corrected[1].text = "there, indeed.".into();
+        corrected[2].text = "café…".into();
+
+        library
+            .update_words("two-segments", &words, &corrected)
+            .unwrap();
+        let saved = library.get("two-segments").unwrap();
+        assert_eq!(saved.text, "Hello there, indeed. café… today?");
+        let segments = saved.segments.unwrap();
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].text, "Hello there, indeed.");
+        assert_eq!(segments[1].text, "café… today?");
+        assert_eq!(segments[0].speaker, Some(0));
+        assert_eq!(segments[1].speaker, Some(1));
+        assert_eq!((segments[0].start, segments[0].end), (0.0, 0.9));
+        assert_eq!((segments[1].start, segments[1].end), (1.0, 1.8));
+        assert_eq!(segments[1].words[0].start, words[2].start);
+        assert_eq!(segments[1].words[1].end, words[3].end);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn word_corrections_validate_before_writing_and_support_rows_without_analysis() {
+        let base = temp_path("word-corrections-legacy");
+        let library = Library::open_at(base.join("library.db"), base.join("library")).unwrap();
+        let original = sample_words();
+        library
+            .save(
+                "legacy",
+                "Old",
+                "file",
+                None,
+                "hello world",
+                &original,
+                &[1],
+                "legacy.wav",
+                3,
+            )
+            .unwrap();
+
+        let mut invalid = original.clone();
+        invalid[0].start += 0.1;
+        assert!(library.update_words("legacy", &original, &invalid).is_err());
+        invalid = original.clone();
+        invalid[0].text = "  ".into();
+        assert!(library.update_words("legacy", &original, &invalid).is_err());
+        invalid = original.clone();
+        invalid.push(invalid[1].clone());
+        assert!(library.update_words("legacy", &original, &invalid).is_err());
+        assert!(
+            library
+                .update_words("missing", &original, &original)
+                .is_err()
+        );
+        assert_eq!(library.get("legacy").unwrap().words, original);
+
+        let mut corrected = original.clone();
+        corrected[1].text = "世界 🌍".into();
+        library
+            .update_words("legacy", &original, &corrected)
+            .unwrap();
+        let saved = library.get("legacy").unwrap();
+        assert_eq!(saved.text, "hello 世界 🌍");
+        assert_eq!(saved.words, corrected);
+        assert!(saved.segments.is_none());
+        assert_eq!(library.list().unwrap()[0].word_count, 2);
         let _ = std::fs::remove_dir_all(&base);
     }
 

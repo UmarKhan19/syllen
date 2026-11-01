@@ -82,6 +82,43 @@ export function joinWords(words: Word[]): string {
   }, "");
 }
 
+export function replaceWordText(
+  segments: Segment[],
+  segmentIndex: number,
+  wordIndex: number,
+  text: string,
+): Segment[] {
+  const word = segments[segmentIndex]?.words[wordIndex];
+  const corrected = text.trim();
+  if (
+    !word ||
+    !corrected ||
+    corrected.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(corrected)
+  ) {
+    throw new Error("Enter a non-empty correction of 512 characters or fewer.");
+  }
+  return segments.map((segment, index) => {
+    if (index !== segmentIndex) return segment;
+    const words = segment.words.map((item, itemIndex) =>
+      itemIndex === wordIndex ? { ...item, text: corrected } : item,
+    );
+    return { ...segment, words, text: joinWords(words) };
+  });
+}
+
+export function sameWordTexts(left: Word[], right: Word[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (word, index) =>
+        word.text === right[index].text &&
+        word.start === right[index].start &&
+        word.end === right[index].end,
+    )
+  );
+}
+
 function overlapSeconds(a: Word, b: Turn): number {
   return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
 }

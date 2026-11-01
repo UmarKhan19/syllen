@@ -467,7 +467,7 @@ export function PlayerBar({
 
   return (
     <section
-      className="sticky top-bar z-10 mt-1 flex h-bar items-center gap-3.5 border-b border-rule bg-paper"
+      className="flex h-bar items-center gap-3.5 border-b border-rule bg-paper"
       aria-label="Audio player"
     >
       <button

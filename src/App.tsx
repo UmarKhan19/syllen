@@ -10,16 +10,19 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import {
   buildCues,
   formatClock,
+  joinWords,
   mergeWords,
   slugify,
   toSrt,
   toTxt,
   toVtt,
   type Segment,
+  type Word,
 } from "./lib/merge";
 import { makeSavedWhen } from "./lib/dateLabel";
 import type {
@@ -83,7 +86,7 @@ const GHOST =
 const CHIP =
   "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-rule bg-sheet px-2.25 py-0.75 text-[11.5px] leading-[1.3]";
 const TOOLBAR_BUTTON =
-  "h-8.5 cursor-pointer border-0 bg-transparent px-3.5 py-0 text-small text-ink-2 transition-colors duration-150 ease-[ease] hover:bg-wash hover:text-ink";
+  "h-8.5 cursor-pointer border-0 bg-transparent px-3.5 py-0 text-small text-ink-2 transition-colors duration-150 ease-[ease] hover:bg-wash hover:text-ink disabled:cursor-not-allowed disabled:opacity-45";
 const FINE = "text-fine leading-[1.6] text-ink-3";
 const CALLOUT =
   "mt-4.5 flex gap-2.75 rounded-card border px-4 py-3.25 text-small leading-[1.6] text-ink-2 [&_svg]:mt-0.5 [&_svg]:shrink-0 [&_svg]:basis-4 [&_strong]:font-semibold";
@@ -155,6 +158,10 @@ export default function App() {
   } | null>(null);
   const [result, setResult] = useState<TranscriptResult | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [analysisReady, setAnalysisReady] = useState(true);
+  const [wordEditing, setWordEditing] = useState(false);
+  const [wordActionsHost, setWordActionsHost] = useState<HTMLDivElement | null>(null);
+  const [wordErrorHost, setWordErrorHost] = useState<HTMLDivElement | null>(null);
   const [speakerCount, setSpeakerCount] = useState<number | null>(null);
   const [speakerNames, setSpeakerNames] = useState<Record<number, string>>({});
   const [whoError, setWhoError] = useState<string | null>(null);
@@ -195,7 +202,20 @@ export default function App() {
   const resultTitleRef = useRef<HTMLHeadingElement>(null);
   const speakerNamesRef = useRef<Record<number, string>>({});
   const busyRef = useRef(false);
+  const wordEditingRef = useRef(false);
+  const wordSavingRef = useRef(false);
+  const wordDirtyRef = useRef(false);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const toolbarCancelRef = useRef<HTMLButtonElement>(null);
+  const toolbarSaveRef = useRef<HTMLButtonElement>(null);
   const playback = usePlayback(result, segments);
+
+  const setWordActionsHostRef = useCallback((node: HTMLDivElement | null) => {
+    setWordActionsHost(node);
+  }, []);
+  const setWordErrorHostRef = useCallback((node: HTMLDivElement | null) => {
+    setWordErrorHost(node);
+  }, []);
 
   const refreshLibrary = useCallback(() => {
     invoke<LibraryItem[]>("list_library")
@@ -221,7 +241,84 @@ export default function App() {
     [result],
   );
 
+  const saveWordCorrections = useCallback(
+    async (expectedWords: Word[], words: Word[], nextSegments: Segment[]) => {
+      if (!result?.saved) throw new Error("This transcript is not saved to the library.");
+      await invoke("save_word_corrections", {
+        id: result.jobId,
+        expectedWords,
+        words,
+      });
+      setSegments(nextSegments);
+      setResult((current) =>
+        current?.jobId === result.jobId
+          ? { ...current, words, text: joinWords(words) }
+          : current,
+      );
+      refreshLibrary();
+      setNotice("Word corrections saved");
+    },
+    [refreshLibrary, result],
+  );
+
+  const onWordEditStateChange = useCallback((editing: boolean, saving = false, dirty = false) => {
+    if (wordEditingRef.current !== editing) setWordEditing(editing);
+    wordEditingRef.current = editing;
+    wordSavingRef.current = saving;
+    wordDirtyRef.current = dirty;
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    let prompting = false;
+    getCurrentWindow().onCloseRequested((event) => {
+      if (!wordEditingRef.current || !wordDirtyRef.current) return;
+      event.preventDefault();
+      if (prompting) return;
+      prompting = true;
+      void (async () => {
+        if (wordSavingRef.current) {
+          await message("A word correction is being saved. Wait for it to finish before closing.", {
+            title: "Save in progress",
+            kind: "info",
+          });
+          return;
+        }
+        const discard = await ask("Discard your unsaved word corrections and close Syllen?", {
+          title: "Unsaved word corrections",
+          kind: "warning",
+          okLabel: "Discard changes",
+          cancelLabel: "Keep editing",
+        });
+        if (!discard) return;
+        if (wordSavingRef.current) {
+          await message("A word correction save started. Wait for it to finish before closing.", {
+            title: "Save in progress",
+            kind: "info",
+          });
+        } else if (wordEditingRef.current && wordDirtyRef.current) {
+          await getCurrentWindow().destroy();
+        } else {
+          await getCurrentWindow().close();
+        }
+      })()
+        .catch(() => undefined)
+        .finally(() => {
+          prompting = false;
+        });
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   const choosePath = useCallback(async (path: string) => {
+    if (wordEditing) return;
     try {
       const info = await invoke<FileInfo>("file_info", { path });
       setFile({ path, ...info });
@@ -232,10 +329,10 @@ export default function App() {
     } catch (problem) {
       setPrompt(String(problem));
     }
-  }, []);
+  }, [wordEditing]);
 
   async function pickFile() {
-    if (busyRef.current) return;
+    if (busyRef.current || wordEditing) return;
     try {
       const path = await open({
         multiple: false,
@@ -262,11 +359,11 @@ export default function App() {
       .onDragDropEvent((event) => {
         const payload = event.payload;
         if (payload.type === "enter" || payload.type === "over") {
-          if (!busyRef.current) setDragging(true);
+          if (!busyRef.current && !wordEditing) setDragging(true);
           return;
         }
         setDragging(false);
-        if (payload.type !== "drop" || busyRef.current) return;
+        if (payload.type !== "drop" || busyRef.current || wordEditing) return;
         if (payload.paths.length > 1) {
           setNotice("One file at a time. Using the first.");
         }
@@ -282,7 +379,7 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [choosePath]);
+  }, [choosePath, wordEditing]);
 
   useEffect(() => {
     speakerLabelsRef.current = speakerLabels;
@@ -360,6 +457,7 @@ export default function App() {
         const transcript = event.payload;
         setResult(transcript);
         setSegments([]);
+        setAnalysisReady(false);
         setSpeakerNames({});
         speakerNamesRef.current = {};
         setSpeakerCount(null);
@@ -367,23 +465,28 @@ export default function App() {
         setWhoProgress(null);
         refreshLibrary();
 
-        const saveSegments = (
+        const saveSegments = async (
           next: Segment[],
           count: number | null,
-        ) => {
-          invoke("save_analysis", {
-            id: transcript.jobId,
-            segments: next,
-            speakerCount: count,
-          })
-            .then(refreshLibrary)
-            .catch(() => undefined);
+        ): Promise<boolean> => {
+          try {
+            await invoke("save_analysis", {
+              id: transcript.jobId,
+              segments: next,
+              speakerCount: count,
+            });
+            refreshLibrary();
+            return true;
+          } catch {
+            setNotice("Speaker labels could not be saved to the library.");
+            return false;
+          }
         };
 
         if (!speakerLabelsRef.current) {
           const plain = mergeWords(transcript.words, []);
           setSegments(plain);
-          saveSegments(plain, null);
+          setAnalysisReady(await saveSegments(plain, null));
           setPhase("done");
           return;
         }
@@ -407,12 +510,12 @@ export default function App() {
           const labelled = mergeWords(transcript.words, diarization.turns);
           setSegments(labelled);
           setSpeakerCount(diarization.speakerCount);
-          saveSegments(labelled, diarization.speakerCount);
+          setAnalysisReady(await saveSegments(labelled, diarization.speakerCount));
         } catch (problem) {
           const plain = mergeWords(transcript.words, []);
           setSegments(plain);
           setWhoError(problem instanceof Error ? problem.message : String(problem));
-          saveSegments(plain, null);
+          setAnalysisReady(await saveSegments(plain, null));
         } finally {
           setPhase("done");
           setWhoProgress(null);
@@ -538,7 +641,7 @@ export default function App() {
   }
 
   function openLibrary() {
-    if (busy) return;
+    if (busy || wordEditing) return;
     setSettingsOpen(false);
     setLibraryOpen(true);
     setQuery("");
@@ -548,19 +651,21 @@ export default function App() {
   }
 
   function closeLibrary() {
+    if (wordEditing) return;
     setLibraryOpen(false);
     setDeletingId(null);
     libraryRef.current?.focus();
   }
 
   function goHome() {
-    if (busy) return;
+    if (busy || wordEditing) return;
     if (!result) {
       urlRef.current?.focus();
       return;
     }
     setResult(null);
     setSegments([]);
+    setAnalysisReady(true);
     setSpeakerNames({});
     speakerNamesRef.current = {};
     setSpeakerCount(null);
@@ -578,7 +683,7 @@ export default function App() {
   }
 
   async function openSaved(item: LibraryItem) {
-    if (busy || openingId) return;
+    if (busy || openingId || wordEditing) return;
     setOpeningId(item.id);
     setLibraryError(null);
     try {
@@ -599,6 +704,7 @@ export default function App() {
         saved: true,
       });
       setSegments(saved.segments ?? mergeWords(saved.words, []));
+      setAnalysisReady(true);
       setSpeakerNames(names);
       setSpeakerCount(saved.speakerCount);
       setWhoError(null);
@@ -620,7 +726,7 @@ export default function App() {
   }
 
   async function deleteSaved(item: LibraryItem) {
-    if (deleteBusy) return;
+    if (deleteBusy || wordEditing) return;
     setDeleteBusy(true);
     try {
       await invoke("delete_transcript", { id: item.id });
@@ -646,7 +752,7 @@ export default function App() {
   async function start(event: FormEvent) {
     event.preventDefault();
     const value = url.trim();
-    if (busy) return;
+    if (busy || wordEditing) return;
     if (!file && !value) {
       setPrompt("Paste a YouTube link or choose a video or audio file.");
       urlRef.current?.focus();
@@ -656,6 +762,7 @@ export default function App() {
     setError(null);
     setResult(null);
     setSegments([]);
+    setAnalysisReady(true);
     setSpeakerNames({});
     speakerNamesRef.current = {};
     setSpeakerCount(null);
@@ -690,7 +797,7 @@ export default function App() {
   }
 
   async function copyTranscript() {
-    if (!result) return;
+    if (!result || wordEditing) return;
     const text = segments.length ? toTxt(segments, speakerNames) : result.text;
     try {
       await navigator.clipboard.writeText(text);
@@ -708,7 +815,7 @@ export default function App() {
   }
 
   async function exportAs(kind: ExportKind) {
-    if (!result) return;
+    if (!result || wordEditing) return;
     try {
       const exportSegments =
         segments.length > 0 ? segments : mergeWords(result.words, []);
@@ -763,6 +870,9 @@ export default function App() {
   // controls drop from 54px to 44px and the field inset tightens.
   const composerHeight = idle ? "h-control" : "h-control-sm";
   const composerInset = idle ? "pl-11" : "pl-10.5";
+  const canEditWords = Boolean(
+    result?.saved && analysisReady && phase === "done" && segments.length > 0,
+  );
   const hasLibrary = Boolean(library && library.length > 0);
   const recent = library?.slice(0, 3) ?? [];
   // One label source per render: shared today/yesterday snapshot, formatters
@@ -778,7 +888,10 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-20 border-b border-rule bg-paper">
+      <header
+        className="sticky top-0 z-20 border-b border-rule bg-paper"
+        data-app-topbar
+      >
         <div
           className={`${SHELL} flex h-bar items-center justify-between gap-5`}
         >
@@ -786,6 +899,7 @@ export default function App() {
             type="button"
             className="group flex cursor-pointer items-center gap-2.25 border-0 bg-transparent p-0 text-ink"
             onClick={goHome}
+            disabled={wordEditing}
             aria-label="Syllen home"
             title="Home"
           >
@@ -804,12 +918,14 @@ export default function App() {
               type="button"
               className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.75 whitespace-nowrap rounded-control border border-rule bg-transparent px-2.75 py-0 text-meta font-medium text-ink-2 transition-colors duration-150 ease-[ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:text-ink-3 [&_svg]:transition-colors [&_svg]:duration-150 [&_svg]:ease-[ease] enabled:hover:[&_svg]:text-ink"
               onClick={openLibrary}
-              disabled={busy}
+              disabled={busy || wordEditing}
               aria-label="Open library"
               title={
                 busy
                   ? "Available when this transcription finishes"
-                  : "Saved transcripts and audio"
+                  : wordEditing
+                    ? "Save or cancel word corrections first"
+                    : "Saved transcripts and audio"
               }
             >
               <LibraryIcon />
@@ -878,7 +994,7 @@ export default function App() {
                     type="button"
                     className="ml-1.5 h-7.5 shrink-0 cursor-pointer rounded-inline border-0 bg-transparent px-2.25 py-0 text-[12px] text-ink-3 transition-colors duration-150 ease-[ease] enabled:hover:bg-wash enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
                     onClick={pickFile}
-                    disabled={busy}
+                    disabled={busy || wordEditing}
                     aria-label="Change file"
                   >
                     Change
@@ -887,7 +1003,7 @@ export default function App() {
                     type="button"
                     className="grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-inline border-0 bg-transparent p-0 text-ink-3 transition-colors duration-150 ease-[ease] enabled:hover:bg-wash enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
                     onClick={clearFile}
-                    disabled={busy}
+                    disabled={busy || wordEditing}
                     aria-label="Remove file"
                     title="Remove file"
                   >
@@ -909,7 +1025,7 @@ export default function App() {
                       if (prompt) setPrompt(null);
                     }}
                     placeholder="Paste a YouTube link"
-                    disabled={busy}
+                    disabled={busy || wordEditing}
                     aria-label="YouTube URL"
                     spellCheck={false}
                     autoCapitalize="none"
@@ -924,7 +1040,7 @@ export default function App() {
                         : "px-3.25 text-meta"
                     }`}
                     onClick={pickFile}
-                    disabled={busy}
+                    disabled={busy || wordEditing}
                   >
                     <PaperclipIcon />
                     Upload
@@ -957,11 +1073,12 @@ export default function App() {
             ) : (
               <button
                 type="submit"
-                className={`cursor-pointer whitespace-nowrap rounded-card border px-6 py-0 text-[14px] font-semibold tracking-[-0.002em] [transition:background-color_0.15s_ease,box-shadow_0.15s_ease,translate_0.05s_ease] active:enabled:translate-y-px disabled:cursor-not-allowed disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink narrow:w-full ${composerHeight} ${
+                className={`cursor-pointer whitespace-nowrap rounded-card border px-6 py-0 text-[14px] font-semibold tracking-[-0.002em] [transition:background-color_0.15s_ease,box-shadow_0.15s_ease,translate_0.05s_ease] active:enabled:translate-y-px disabled:cursor-not-allowed narrow:w-full ${composerHeight} ${
                   idle
-                    ? "border-ink bg-ink text-on-ink enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover"
+                    ? "border-ink bg-ink text-on-ink enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink"
                     : "border-rule bg-transparent text-ink enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:shadow-none"
                 }`}
+                disabled={wordEditing}
               >
                 Transcribe
               </button>
@@ -1017,8 +1134,9 @@ export default function App() {
               </h2>
               <button
                 type="button"
-                className="cursor-pointer border-0 bg-transparent p-0 text-fine text-ink-3 underline decoration-dotted decoration-1 underline-offset-[3px] hover:text-ink hover:decoration-solid"
+                className="cursor-pointer border-0 bg-transparent p-0 text-fine text-ink-3 underline decoration-dotted decoration-1 underline-offset-[3px] hover:text-ink hover:decoration-solid disabled:cursor-not-allowed disabled:opacity-45"
                 onClick={openLibrary}
+                disabled={wordEditing}
               >
                 Open library
               </button>
@@ -1030,7 +1148,7 @@ export default function App() {
                     type="button"
                     className={`grid w-full cursor-pointer grid-cols-[154px_minmax(0,1fr)_auto_16px] items-center border-0 border-t border-rule-soft bg-transparent px-0 py-3.25 text-left disabled:cursor-default disabled:opacity-55 compact:grid-cols-[minmax(0,1fr)_auto_16px] compact:gap-y-1 [&_svg]:justify-self-end [&_svg]:text-ink-3 [&_svg]:transition-colors [&_svg]:duration-150 [&_svg]:ease-[ease] enabled:hover:[&_svg]:text-ink ${RECENT_TITLE_HOVER}`}
                     onClick={() => openSaved(item)}
-                    disabled={openingId !== null}
+                    disabled={openingId !== null || wordEditing}
                   >
                     <span className="overflow-hidden pr-5 text-right text-ellipsis whitespace-nowrap font-mono text-micro tracking-[0.01em] text-ink-3 tabular-nums compact:col-span-full compact:p-0 compact:text-left">
                       {savedWhen(item.createdAt)}
@@ -1171,36 +1289,6 @@ export default function App() {
                   </span>
                 </p>
               </div>
-              <div className="inline-flex overflow-hidden rounded-control border border-rule bg-sheet">
-                <button
-                  type="button"
-                  className={TOOLBAR_BUTTON}
-                  onClick={copyTranscript}
-                >
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  className={`${TOOLBAR_BUTTON} border-l border-rule`}
-                  onClick={() => exportAs("srt")}
-                >
-                  SRT
-                </button>
-                <button
-                  type="button"
-                  className={`${TOOLBAR_BUTTON} border-l border-rule`}
-                  onClick={() => exportAs("vtt")}
-                >
-                  VTT
-                </button>
-                <button
-                  type="button"
-                  className={`${TOOLBAR_BUTTON} border-l border-rule`}
-                  onClick={() => exportAs("txt")}
-                >
-                  TXT
-                </button>
-              </div>
             </div>
 
             {whoError && (
@@ -1212,19 +1300,86 @@ export default function App() {
               </div>
             )}
 
-            {result.audioUrl && (
-              <PlayerBar
-                playback={playback}
-                peaks={result.waveform ?? []}
-                canFollow={segments.length > 0}
-              />
-            )}
+            <div
+              className="sticky top-bar z-[15] mt-1 bg-paper"
+              data-reading-dock
+            >
+              <div className="grid min-h-9.5 grid-cols-[minmax(0,1fr)] items-center border-b border-rule">
+                <div
+                  className="inline-flex flex-none justify-self-end rounded-control border border-rule bg-sheet"
+                  role="group"
+                  aria-label="Transcript actions"
+                >
+                  {!wordEditing && (
+                    <>
+                      <button
+                        type="button"
+                        className={`${TOOLBAR_BUTTON} rounded-l-[8px]`}
+                        onClick={copyTranscript}
+                      >
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        className={`${TOOLBAR_BUTTON} border-l border-rule`}
+                        onClick={() => exportAs("srt")}
+                      >
+                        SRT
+                      </button>
+                      <button
+                        type="button"
+                        className={`${TOOLBAR_BUTTON} border-l border-rule`}
+                        onClick={() => exportAs("vtt")}
+                      >
+                        VTT
+                      </button>
+                      <button
+                        type="button"
+                        className={`${TOOLBAR_BUTTON} border-l border-rule${canEditWords ? "" : " rounded-r-[8px]"}`}
+                        onClick={() => exportAs("txt")}
+                      >
+                        TXT
+                      </button>
+                    </>
+                  )}
+                  {canEditWords && (
+                    <div
+                      ref={setWordActionsHostRef}
+                      className={`flex min-h-9 flex-none items-center gap-2 ${
+                        wordEditing
+                          ? ""
+                          : "border-l border-rule pl-2 [&>button]:rounded-r-[8px]"
+                      }`}
+                    />
+                  )}
+                </div>
+                <div
+                  ref={setWordErrorHostRef}
+                  className="min-w-0 pt-1 pb-2 empty:hidden"
+                />
+              </div>
+              {result.audioUrl && (
+                <PlayerBar
+                  playback={playback}
+                  peaks={result.waveform ?? []}
+                  canFollow={segments.length > 0}
+                />
+              )}
+            </div>
 
             <Transcript
               segments={segments}
               fallback={result.text}
               speakerNames={speakerNames}
               onRename={renameSpeaker}
+              canEditWords={canEditWords}
+              onSaveWords={saveWordCorrections}
+              onEditStateChange={onWordEditStateChange}
+              actionHost={wordActionsHost}
+              errorHost={wordErrorHost}
+              editButtonRef={editButtonRef}
+              toolbarCancelRef={toolbarCancelRef}
+              toolbarSaveRef={toolbarSaveRef}
               active={playback.active}
               onSeek={playback.canSeek ? playback.playFrom : undefined}
               follow={playback.follow}

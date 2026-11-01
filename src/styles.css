@@ -109,6 +109,10 @@
     0 2px 8px rgba(20, 22, 26, 0.05);
   --shadow-focus: 0 0 0 3px rgba(20, 22, 26, 0.12);
   --shadow-button-hover: 0 8px 20px -10px rgba(20, 22, 26, 0.6);
+  /* The word-correction popover floats above the transcript's ink, so it
+     carries a wider, softer lift than a button. */
+  --shadow-word-correction: 0 8px 24px rgb(20 22 26 / 12%),
+    0 2px 5px rgb(20 22 26 / 8%);
   --container-page: 1280px;
 
   /* The design is authored in px, so one spacing step is 4px, not 0.25rem.
@@ -116,14 +120,16 @@
   --spacing: 4px;
 
   /* Repeated dimensions: sticky bar/player height, controls, icon buttons,
-     page gutter, the ruled margin, and the sticky scroll offset (58+58+12). */
+     page gutter, the ruled margin, and the sticky scroll offset. The offset
+     is 58px topbar + 4px dock margin + 38px tools rail + 58px player + 6px
+     clearance, because the reading dock is the sticky block now. */
   --spacing-bar: 58px;
   --spacing-control: 54px;
   --spacing-control-sm: 44px;
   --spacing-icon: 36px;
   --spacing-gutter: 40px;
   --spacing-margin: 154px;
-  --spacing-sticky: 128px;
+  --spacing-sticky: 164px;
 
   --ease-expo: cubic-bezier(0.22, 0.61, 0.36, 1);
 

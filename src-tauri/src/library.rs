@@ -10,6 +10,57 @@ use crate::{
     now_millis,
 };
 
+fn segments_words(segments: &[Segment]) -> Vec<Word> {
+    segments
+        .iter()
+        .flat_map(|segment| segment.words.iter().cloned())
+        .collect()
+}
+
+fn join_words(words: &[Word]) -> String {
+    // Keep punctuation spacing in step with src/lib/merge.ts::joinWords.
+    words.iter().fold(String::new(), |mut text, word| {
+        if !text.is_empty()
+            && !word.text.chars().all(|c| {
+                matches!(
+                    c,
+                    '.' | ',' | '!' | '?' | ';' | ':' | '…' | ')' | '»' | '"' | '\''
+                )
+            })
+        {
+            text.push(' ');
+        }
+        text.push_str(&word.text);
+        text
+    })
+}
+
+fn validate_word_edits(expected: &[Word], corrected: &[Word]) -> Result<(), String> {
+    if expected.is_empty() || expected.len() != corrected.len() || expected.len() > 1_000_000 {
+        return Err("The correction does not match the transcript word count.".into());
+    }
+    for (before, after) in expected.iter().zip(corrected) {
+        if !before.start.is_finite()
+            || !before.end.is_finite()
+            || before.start != after.start
+            || before.end != after.end
+        {
+            return Err("Word corrections cannot change timestamps.".into());
+        }
+        if after.text.trim().is_empty()
+            || after.text != after.text.trim()
+            || after.text.chars().count() > 512
+            || after.text.chars().any(char::is_control)
+        {
+            return Err(
+                "Each correction must contain up to 512 characters without control characters."
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Transcripts and their audio live in app data, not the job cache.
 /// Jobs write at the end; the UI reads and deletes from the library.
 pub(super) struct Library {
@@ -211,14 +262,99 @@ impl Library {
         segments: &[Segment],
         speaker_count: Option<u32>,
     ) -> Result<(), String> {
-        let segments = serde_json::to_string(segments)
+        let segments_json = serde_json::to_string(segments)
             .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
-        let conn = self.conn()?;
-        conn.execute(
+        let mut conn = self.conn()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
+        let words_json: String = tx
+            .query_row("SELECT words FROM transcripts WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(|e| format!("Could not read the transcript words: {e}"))?
+            .ok_or_else(|| "That transcript is no longer in the library.".to_string())?;
+        let words: Vec<Word> = serde_json::from_str(&words_json)
+            .map_err(|e| format!("The saved words are unreadable: {e}"))?;
+        if segments_words(segments) != words {
+            return Err("The transcript changed before speaker labels could be saved.".into());
+        }
+        tx.execute(
             "UPDATE transcripts SET segments = ?2, speaker_count = ?3 WHERE id = ?1",
-            params![id, segments, speaker_count.map(|value| value as i64)],
+            params![id, segments_json, speaker_count.map(|value| value as i64)],
         )
         .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
+        tx.commit()
+            .map_err(|e| format!("Could not save the speaker labels: {e}"))?;
+        Ok(())
+    }
+
+    pub(super) fn update_words(
+        &self,
+        id: &str,
+        expected: &[Word],
+        corrected: &[Word],
+    ) -> Result<(), String> {
+        validate_word_edits(expected, corrected)?;
+        let mut conn = self.conn()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("Could not save the corrections: {e}"))?;
+        let row: Option<(String, Option<String>)> = tx
+            .query_row(
+                "SELECT words, segments FROM transcripts WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| format!("Could not read the transcript: {e}"))?;
+        let Some((words_json, segments_json)) = row else {
+            return Err("That transcript is no longer in the library.".into());
+        };
+        let current: Vec<Word> = serde_json::from_str(&words_json)
+            .map_err(|e| format!("The saved words are unreadable: {e}"))?;
+        if current != expected {
+            return Err(
+                "This transcript changed elsewhere. Reload it before saving corrections.".into(),
+            );
+        }
+        let next_segments = segments_json
+            .map(|json| {
+                let mut segments: Vec<Segment> = serde_json::from_str(&json)
+                    .map_err(|e| format!("The saved speaker labels are unreadable: {e}"))?;
+                if segments_words(&segments) != current {
+                    return Err(
+                        "The saved speaker labels no longer match the transcript words."
+                            .to_string(),
+                    );
+                }
+                let mut index = 0;
+                for segment in &mut segments {
+                    for word in &mut segment.words {
+                        word.text.clone_from(&corrected[index].text);
+                        index += 1;
+                    }
+                    segment.text = join_words(&segment.words);
+                }
+                serde_json::to_string(&segments)
+                    .map_err(|e| format!("Could not save the speaker labels: {e}"))
+            })
+            .transpose()?;
+        let words_json = serde_json::to_string(corrected)
+            .map_err(|e| format!("Could not save the corrected words: {e}"))?;
+        let text = join_words(corrected);
+        let changed = tx
+            .execute(
+                "UPDATE transcripts SET text = ?2, words = ?3, segments = ?4 WHERE id = ?1",
+                params![id, text, words_json, next_segments],
+            )
+            .map_err(|e| format!("Could not save the corrections: {e}"))?;
+        if changed != 1 {
+            return Err("That transcript is no longer in the library.".into());
+        }
+        tx.commit()
+            .map_err(|e| format!("Could not save the corrections: {e}"))?;
         Ok(())
     }
 
