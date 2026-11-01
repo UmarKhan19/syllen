@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { makeSavedWhen } from "./dateLabel";
+import { makeSavedWhen } from "./date-label";
 
 const DAY = 86_400_000;
 
-// The pre-change implementation from src/App.tsx, with the clock pinned instead
+// The pre-change implementation from src/app.tsx, with the clock pinned instead
 // of read per row. Oracle only: the shipped code is makeSavedWhen.
 function savedWhenBefore(millis: number, now: Date): string {
   const date = new Date(millis);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { positionWordCorrection } from "./wordCorrectionPosition";
+import { positionWordCorrection } from "./word-correction-position";
 
 const viewport = { width: 800, height: 600, topInset: 116 };
 const popover = { width: 200, height: 80 };

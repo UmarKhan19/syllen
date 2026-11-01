@@ -95,13 +95,16 @@ never leaves it, and the output knows who said what.
 ## Evidence on Hand
 
 - `README.md` — product truth, pipeline, requirements, licensing, privacy.
-- `src/lib/merge.ts` — the transcript model: `Word`, `Turn`, `Segment`,
-  `Cue`, plus the caption formatters.
-- `src/App.tsx` — the single screen: composer, pipeline, result, settings
-  drawer, export actions.
-- `src-tauri/src/` holds the Rust core: `lib.rs` (pipeline, commands, job events),
-  `library.rs` (SQLite library), `contracts.rs` (wire types), and `media.rs` (audio
-  server).
+- `src/lib/transcript.ts` — transcript types, word-to-speaker assignment, and
+  passage construction. `src/lib/captions.ts` builds caption cues and formats
+  SRT, VTT, and TXT exports.
+- `src/app.tsx` — app composition and saved-transcript navigation; focused
+  composer, job, settings, library, transcript, and playback code lives under
+  `src/features/`.
+- `src-tauri/src/` holds the Rust core: `lib.rs` (app setup and command
+  registration), `jobs.rs` and `jobs/` (job lifecycle, pipeline orchestration,
+  stages, sidecar, and audio persistence), `library.rs` (SQLite library),
+  `contracts.rs` (wire types), and `media-server.rs` (audio server).
 - No screenshots, testimonials, benchmarks, or press. The app is young and
   private; future work must not invent them.
 

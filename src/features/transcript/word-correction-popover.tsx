@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import {
   positionWordCorrection,
   type WordCorrectionPosition,
-} from "./lib/wordCorrectionPosition";
+} from "./word-correction-position";
 
 export function WordCorrectionPopover({
   anchor,

@@ -173,22 +173,22 @@ If you redistribute ffmpeg, check the license of the build you ship (LGPL or GPL
 
 ```bash
 npm run build        # tsc typecheck, then vite build
-npm test             # Vitest: merge, captions, playback sync, WAV parsing, date labels
+npm test             # Vitest: shared/feature helper tests and sidecar notice checks
 cd src-tauri
-cargo test           # library, waveform, media server, and file checks
+cargo test           # module tests: library, waveform, media server, audio persistence, and file validation
 ```
 
 Project layout:
 
 ```
-src/                 App coordinator, transcript view, player, styles
-src/lib/             pure helpers: merge and captions, WAV parsing, Who worker, date labels, types
-src-tauri/src/       lib.rs (commands, tools, job lifecycle), library.rs (SQLite and audio),
-                     media.rs (loopback audio server), contracts.rs (wire types)
+src/                 app.tsx composes features; features/{transcription,library,settings,transcript,playback}/ own UI and hooks
+src/lib/             shared transcript/caption helpers, wire types, byte formatting
+src-tauri/src/       lib.rs (setup and command registration), jobs/ (job lifecycle and pipeline),
+                     library.rs (SQLite and audio), media-server.rs (loopback server), contracts.rs (wire types)
 src-tauri/sidecar/   Node bridge to Voz
 ```
 
-`src/lib/merge.ts` holds the transcript logic: assigning words to speakers, grouping them into passages, and splitting caption cues. `src-tauri/src/lib.rs` runs the pipeline; `library.rs` stores transcripts and their audio.
+`src/lib/transcript.ts` assigns words to speakers and groups them into passages; `src/lib/captions.ts` builds caption cues and exports. Feature IPC lives in hooks under `src/features/`. Rust job orchestration and stages live under `src-tauri/src/jobs/`; `lib.rs` registers commands and sets up the app. Authored source files and folders use kebab-case; framework-required filenames are exceptions.
 
 `AGENTS.md` maps file ownership, the TypeScript/Rust and sidecar contracts, and the verification commands. The app writes to your real app data folder. For UI work, run it under Xvfb with isolated `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`; `AGENTS.md` has the commands.
 

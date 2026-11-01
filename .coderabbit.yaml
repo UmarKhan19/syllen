@@ -11,10 +11,10 @@ reviews:
     - path: "src/**/*.{ts,tsx}"
       instructions: |
         Strict TypeScript with noUnusedLocals and noUnusedParameters.
-        IPC calls (invoke/listen) belong in App.tsx; reusable logic goes in src/lib/.
-        src/lib/types.ts mirrors the Serde structs in src-tauri/src/contracts.rs, so flag a
-        change made on one side only. MEDIA_EXTENSIONS in App.tsx must stay identical to the
-        list in src-tauri/src/lib.rs.
+        Put IPC calls in the hook or view that owns the feature; reusable logic goes in src/lib/.
+        src/lib/wire-types.ts mirrors the Serde structs in src-tauri/src/contracts.rs, so flag a
+        change made on one side only. MEDIA_EXTENSIONS in src/app.tsx must stay identical to
+        the list in src-tauri/src/media-file.rs.
     - path: "src-tauri/src/**/*.rs"
       instructions: |
         library.rs owns the SQLite schema and there is no migration runner, so a schema change

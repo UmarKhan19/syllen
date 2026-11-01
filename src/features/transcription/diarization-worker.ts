@@ -1,5 +1,5 @@
 import { Who } from "@desert-ant-labs/who";
-import type { WhoMessage, WhoRequest } from "./who-protocol";
+import type { WhoMessage, WhoRequest } from "./diarization-protocol";
 import { wavPcm16ToFloat32 } from "./wav";
 
 const scope = self as unknown as {
