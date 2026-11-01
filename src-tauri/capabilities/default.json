@@ -8,6 +8,10 @@
   "permissions": [
     "core:default",
     "dialog:default",
-    "core:path:default"
+    "core:path:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "dialog:allow-ask",
+    "dialog:allow-message"
   ]
 }

@@ -4,6 +4,8 @@ import {
   isPunctuation,
   joinWords,
   mergeWords,
+  replaceWordText,
+  sameWordTexts,
   segmentIndexAt,
   speakerAt,
   toSrt,
@@ -88,6 +90,38 @@ describe("mergeWords", () => {
       end: index * 0.5 + 0.4,
     }));
     expect(mergeWords(run, []).length).toBeGreaterThan(1);
+  });
+});
+
+describe("word corrections", () => {
+  it("replaces text without moving timing or speaker and keeps joined text/export aligned", () => {
+    const before = mergeWords(words, turns);
+    const corrected = replaceWordText(before, 0, 1, "there, indeed.");
+    expect(corrected[0].speaker).toBe(before[0].speaker);
+    expect(corrected[0].start).toBe(before[0].start);
+    expect(corrected[0].end).toBe(before[0].end);
+    expect(corrected[0].words[1]).toEqual({
+      text: "there, indeed.", start: 0.4, end: 0.9,
+    });
+    expect(corrected[0].text).toBe("Hello there, indeed.");
+    expect(toTxt(corrected)).toContain("Hello there, indeed.");
+    expect(toSrt(buildCues(corrected))).toContain("Hello there, indeed.");
+    expect(toVtt(buildCues(corrected))).toContain("Hello there, indeed.");
+    expect(before[0].text).toBe("Hello there.");
+  });
+
+  it("rejects blank or control-character text instead of dropping a word", () => {
+    const segments = mergeWords(words, turns);
+    expect(() => replaceWordText(segments, 0, 0, "  ")).toThrow();
+    expect(() => replaceWordText(segments, 0, 0, "hello\nworld")).toThrow();
+    expect(() => replaceWordText(segments, 9, 0, "hello")).toThrow();
+  });
+
+  it("detects unchanged corrections by text and original timing", () => {
+    expect(sameWordTexts(words, [...words])).toBe(true);
+    const corrected = replaceWordText(mergeWords(words, []), 0, 0, "Hi")
+      .flatMap((segment) => segment.words);
+    expect(sameWordTexts(words, corrected)).toBe(false);
   });
 });
 
