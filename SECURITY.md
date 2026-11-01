@@ -28,7 +28,7 @@ There is no guaranteed response time and no response SLA. This is a volunteer pr
 In scope:
 
 - The Rust, TypeScript, and sidecar code in this repository.
-- The library database and audio files in app data, and the loopback audio server in `src-tauri/src/media.rs`.
+- The library database and audio files in app data, and the loopback audio server in `src-tauri/src/media-server.rs`.
 - The bundled Tauri configuration and capabilities.
 - How Syllen bundles, invokes, or configures Voz, Who, `onnxruntime`, `yt-dlp`, `ffmpeg`, or Tauri, including the version it pins.
 - How the app downloads, verifies, or updates a dependency, and what it sends over the network or how it checks the responses.

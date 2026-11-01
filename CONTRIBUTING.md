@@ -43,9 +43,9 @@ Keep a pull request to one topic. Unrelated renames, formatting, and dependency 
 
 [AGENTS.md](AGENTS.md) maps which file owns what, and lists the contracts that must change together:
 
-- `src/lib/types.ts` mirrors the structs in `src-tauri/src/contracts.rs`.
-- `MEDIA_EXTENSIONS` exists in both `src/App.tsx` and `src-tauri/src/lib.rs`.
-- A new Tauri command needs registration in `generate_handler!` and a caller in `App.tsx`.
+- `src/lib/wire-types.ts` mirrors the structs in `src-tauri/src/contracts.rs`.
+- `MEDIA_EXTENSIONS` exists in `src/app.tsx` and `src-tauri/src/media-file.rs`.
+- Register new Tauri commands in `generate_handler!` in `src-tauri/src/lib.rs`; the feature-owning hook or view calls them.
 - The sidecar writes one JSON object per line with `type: "progress" | "result" | "error"`.
 
 Put reusable logic in `src/lib/` as pure functions and add a test next to it. A schema change to the library needs a migration that keeps existing rows readable, plus a test.
