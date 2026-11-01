@@ -13,6 +13,10 @@ mono dates and sizes, no thumbnails.
 
 ## Palette (tokens in `src/styles.css`)
 
+`src/styles.css` owns the palette. UI palette colors sit in `:root`; `@theme`
+aliases them as semantic utilities, so `--color-ink-3` becomes `text-ink-3` and
+`--color-rule` becomes `border-rule`. Use those names, never a raw hex.
+
 ### Grounds
 
 | Token | Value | Use |
@@ -28,6 +32,8 @@ mono dates and sizes, no thumbnails.
 | `--ink` | `#14161a` | Primary text, headings, action fill, deep controls |
 | `--ink-2` | `#4a4f57` | Secondary text |
 | `--ink-3` | `#676c74` | Meta text, timecodes, labels |
+| `--ink-deep` | `#05060a` | Primary hover and pressed fill |
+| `--on-ink` | `#fbfbf9` | Text and glyphs on an ink fill |
 | `--speech` | `#1c1f25` | Spoken-word body text |
 
 ### Rules
@@ -36,6 +42,7 @@ mono dates and sizes, no thumbnails.
 |---|---|---|
 | `--rule` | `#dedcd7` | Hairline separation (transcript margin rule, process-table columns) |
 | `--rule-soft` | `#e8e6e1` | Softer separation (process-table verticals on narrow viewports) |
+| `--rule-strong` | `#cfcdc7` | Control border on hover |
 
 ### Speaker pens (colour means something — only meaning)
 
@@ -52,7 +59,18 @@ mono dates and sizes, no thumbnails.
 |---|---|---|
 | `--alert` | `#9c2f21` | Failure states |
 | `--alert-wash` | `#f7ecea` | Failure callout ground |
+| `--alert-line` | `#e3cec9` | Failure callout border |
+| `--alert-deep` | `#7f2419` | Destructive hover fill |
 | `--ok` | `#2a6540` | Success states |
+| `--ok-line` | `#cddccf` | Success pip and callout border |
+
+### Controls
+
+| Token | Value | Use |
+|---|---|---|
+| `--scrim` | `rgba(24, 25, 28, 0.26)` | Ground behind an open drawer |
+| `--disabled` | `#e4e3df` | Disabled primary fill |
+| `--disabled-ink` | `#5f636a` | Text and glyphs on a disabled fill |
 
 ### Reading states
 
@@ -76,7 +94,8 @@ unplayed waveform is `--wave`, a darker rule.
 | Measurement / timecodes | Spline Sans Mono | `--font-mono` | Self-hosted latin subset (OFL 1.1) |
 
 All three families are self-hosted under `public/fonts/`; the SIL OFL licence
-text ships beside each font file.
+text ships beside each font file. In markup they are `font-ui`, `font-text`,
+and `font-mono`.
 
 ## Scale
 
@@ -90,7 +109,9 @@ text ships beside each font file.
 
 ## Geometry
 
-- Card radii: 12px (`--radius`), small controls: 9px (`--radius-sm`)
+- Card radii: 12px (`rounded-card`); small controls: 9px (`rounded-control`);
+  square inline Change, Clear, and Delete buttons at 30-32px: 7px
+  (`rounded-inline`)
 - Sticky chrome: 58px topbar, 58px player directly below it; transcript paragraphs carry `scroll-margin-top: 128px` so a followed passage never hides under them
 - Transcript paragraph: ruled left margin, 58px timecode column, 96px speaker column, speech column at 68ch with 20px stand-off from the margin rule
 - Continuation ticks: hairline between turn-continue paragraphs
@@ -116,7 +137,26 @@ reading position must not lag the audio.
 Overlay fade-in and toast rise are state transitions, not decoration. Respects
 `prefers-reduced-motion`.
 
-## Components (see `src/styles.css`)
+## Implementation
+
+- `src/styles.css` owns the theme. Palette color literals sit in `:root`, and
+  `@theme` aliases them as palette utilities. Reusable font, type, geometry,
+  and effect tokens are defined directly in `@theme`, such as `font-text`,
+  `rounded-card`, and `shadow-float`.
+- Consumers use the semantic utility classes. Add a token only when an intent
+  repeats; reach for the existing spacing utilities first.
+- `--spacing` is 4px, so numeric utilities stay at fixed pixels whatever the
+  root font size: `p-4` is 16px and `p-5.5` is 22px.
+- Browser chrome values (`--chrome-scroll`, `--chrome-scroll-hover`,
+  `--chrome-selection`) live in `:root` without utility aliases.
+- Preflight is not imported. The shipped reset in `@layer base` provides
+  defaults, and utilities intentionally override it.
+- Responsive work uses `compact:` for `max-width: 820px` and `narrow:` for
+  `max-width: 620px`. Both are inclusive and match the old blocks. No default
+  breakpoints are generated.
+- New UI uses utilities. Do not add component CSS classes or `@apply`.
+
+## Components
 
 - **topbar** — 58px window bar: wordmark left, "Audio never leaves this machine" + green pip, Library with a mono count, settings right.
 - **composer** — URL field with chain glyph and an inline Upload action; a chosen file becomes a chip with name, format, size, Change and remove. Dropping a file on the window does the same. Ink-filled primary action on the idle screen.
