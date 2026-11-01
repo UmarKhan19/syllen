@@ -1,0 +1,31 @@
+language: en-US
+
+reviews:
+  profile: chill
+  path_filters:
+    - "!src-tauri/target/**"
+    - "!dist/**"
+    - "!package-lock.json"
+    - "!src-tauri/sidecar/node_modules/**"
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        Strict TypeScript with noUnusedLocals and noUnusedParameters.
+        IPC calls (invoke/listen) belong in App.tsx; reusable logic goes in src/lib/.
+        src/lib/types.ts mirrors the Serde structs in src-tauri/src/contracts.rs, so flag a
+        change made on one side only. MEDIA_EXTENSIONS in App.tsx must stay identical to the
+        list in src-tauri/src/lib.rs.
+    - path: "src-tauri/src/**/*.rs"
+      instructions: |
+        library.rs owns the SQLite schema and there is no migration runner, so a schema change
+        without a tested migration that keeps existing rows readable is a bug.
+        Job lifecycle: one job at a time, check_cancel between stages, and jobs/ is cleaned up
+        only after the audio moves into the library.
+  auto_review:
+    drafts: false
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
