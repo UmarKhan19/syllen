@@ -1,19 +1,21 @@
 import {
+  type FormEvent,
+  Fragment,
   memo,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  Fragment,
-  type FormEvent,
-  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { isPunctuation, speakerLabel, type Segment, type Word } from "../../lib/transcript";
 import { formatClock } from "../../lib/captions";
-import { WordCorrectionPopover } from "./word-correction-popover";
+import { isPunctuation, type Segment, speakerLabel, type Word } from "../../lib/transcript";
 import { useWordCorrections } from "./use-word-corrections";
+import { WordCorrectionPopover } from "./word-correction-popover";
+import { wordNavigationTarget, wordTabStopIndex } from "./word-navigation";
 
 /* Colour means a person: the four pens, modulo the speaker id. */
 const speakerInk = ["text-pen-1", "text-pen-2", "text-pen-3", "text-pen-4"];
@@ -80,6 +82,7 @@ export const Transcript = memo(function Transcript({
   onFollowOff: () => void;
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [focusedWord, setFocusedWord] = useState({ segment: 0, word: 0 });
   const [draftName, setDraftName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const returnFocusIndexRef = useRef<number | null>(null);
@@ -110,6 +113,25 @@ export const Transcript = memo(function Transcript({
     editButtonRef,
     toolbarCancelRef,
   });
+  const wordCounts = useMemo(
+    () => renderedSegments.map((item) => item.words.length),
+    [renderedSegments],
+  );
+  const handleWordKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, segmentIndex: number, wordIndex: number) => {
+      if (!onSeek && !editingWords) return;
+      const target = wordNavigationTarget(event.key, segmentIndex, wordIndex, wordCounts);
+      if (!target) return;
+      event.preventDefault();
+      setFocusedWord(target);
+      containerRef.current
+        ?.querySelector<HTMLButtonElement>(
+          `[data-word-segment="${target.segment}"][data-word-index="${target.word}"]`,
+        )
+        ?.focus();
+    },
+    [editingWords, onSeek, wordCounts],
+  );
   const reduceMotion = useMemo(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
@@ -372,6 +394,9 @@ export const Transcript = memo(function Transcript({
               editingWords={editingWords}
               editingWord={editingWord?.segment === index ? editingWord.word : null}
               onBeginWord={beginWord}
+              focusedWord={focusedWord}
+              onWordFocus={setFocusedWord}
+              onWordKeyDown={handleWordKeyDown}
             />
           );
         })}
@@ -393,6 +418,9 @@ const Paragraph = memo(function Paragraph({
   editingWords,
   editingWord,
   onBeginWord,
+  focusedWord,
+  onWordFocus,
+  onWordKeyDown,
 }: {
   segment: Segment;
   index: number;
@@ -406,8 +434,16 @@ const Paragraph = memo(function Paragraph({
   editingWords: boolean;
   editingWord: number | null;
   onBeginWord: (index: number, wordIndex: number, word: Word, anchor: HTMLButtonElement) => void;
+  focusedWord: { segment: number; word: number };
+  onWordFocus: (target: { segment: number; word: number }) => void;
+  onWordKeyDown: (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    segment: number,
+    word: number,
+  ) => void;
 }) {
   const speaker = segment.speaker;
+  const tabStopWord = wordTabStopIndex(index, segment.words.length, focusedWord);
   return (
     <div
       className={`${paraFrame} ${labelled ? paraColumns : paraColumnsPlain}${startsTurn ? " mt-7.5 first:mt-3" : ""}`}
@@ -460,11 +496,14 @@ const Paragraph = memo(function Paragraph({
                             : "bg-word shadow-[0_0_0_2px_var(--word)]"
                           : "bg-transparent hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
                       }`}
-                      data-word-segment={index}
                       data-word-index={wordIndex}
                       data-word-correction-target
                       aria-pressed={editingWord === wordIndex}
                       aria-label={`Edit word ${word.text} at ${formatClock(word.start)}`}
+                      tabIndex={wordIndex === tabStopWord ? 0 : -1}
+                      data-word-segment={index}
+                      onFocus={() => onWordFocus({ segment: index, word: wordIndex })}
+                      onKeyDown={(event) => onWordKeyDown(event, index, wordIndex)}
                       onClick={(event) => onBeginWord(index, wordIndex, word, event.currentTarget)}
                     >
                       {word.text}
@@ -472,34 +511,47 @@ const Paragraph = memo(function Paragraph({
                   </Fragment>
                 );
               }
+              if (!onSeek) {
+                return (
+                  <Fragment key={`${word.start}-${word.end}`}>
+                    {prefix}
+                    <span
+                      className={
+                        current && activeWord === wordIndex
+                          ? "rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)]"
+                          : undefined
+                      }
+                    >
+                      {word.text}
+                    </span>
+                  </Fragment>
+                );
+              }
               return (
-                <button
-                  type="button"
-                  disabled={!onSeek}
-                  key={`${word.start}-${word.end}`}
-                  className={
-                    current && activeWord === wordIndex
-                      ? onSeek
-                        ? "inline border-0 bg-transparent p-0 align-baseline rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
-                        : "rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)]"
-                      : onSeek
-                        ? "inline border-0 bg-transparent p-0 align-baseline cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
-                        : undefined
-                  }
-                  onClick={
-                    onSeek
-                      ? (event) => {
-                          if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey)
-                            return;
-                          if (window.getSelection()?.isCollapsed === false) return;
-                          onSeek(word.start);
-                        }
-                      : undefined
-                  }
-                >
+                <Fragment key={`${word.start}-${word.end}`}>
                   {prefix}
-                  {word.text}
-                </button>
+                  <button
+                    type="button"
+                    data-word-segment={index}
+                    data-word-index={wordIndex}
+                    tabIndex={wordIndex === tabStopWord ? 0 : -1}
+                    onFocus={() => onWordFocus({ segment: index, word: wordIndex })}
+                    onKeyDown={(event) => onWordKeyDown(event, index, wordIndex)}
+                    className={
+                      current && activeWord === wordIndex
+                        ? "inline border-0 bg-transparent p-0 align-baseline rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
+                        : "inline border-0 bg-transparent p-0 align-baseline cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
+                    }
+                    onClick={(event) => {
+                      if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+                      if (event.detail !== 0 && window.getSelection()?.isCollapsed === false)
+                        return;
+                      onSeek(word.start);
+                    }}
+                  >
+                    {word.text}
+                  </button>
+                </Fragment>
               );
             })}
           </span>
