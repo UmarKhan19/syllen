@@ -66,7 +66,8 @@ export function LibraryDrawer({
       <button
         type="button"
         className="absolute inset-0 z-0 h-full w-full cursor-default border-0 bg-transparent p-0"
-        aria-label="Close library"
+        tabIndex={-1}
+        aria-hidden="true"
         onClick={onClose}
       />
       <aside
