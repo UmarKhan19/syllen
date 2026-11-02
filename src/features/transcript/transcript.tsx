@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noArrayIndexKey: transcript source order is stable across text-only corrections.
 import {
   type FormEvent,
   Fragment,
@@ -325,7 +326,7 @@ export const Transcript = memo(function Transcript({
               <div
                 className={`${paraFrame} ${paraColumns}${startsTurn ? " mt-7.5 first:mt-3" : ""}`}
                 data-para-index={index}
-                key={`${segment.start}-${segment.end}`}
+                key={`${index}-${segment.start}-${segment.end}`}
               >
                 <TimeCode
                   start={segment.start}
@@ -384,7 +385,7 @@ export const Transcript = memo(function Transcript({
 
           return (
             <Paragraph
-              key={`${segment.start}-${segment.end}`}
+              key={`${index}-${segment.start}-${segment.end}`}
               segment={segment}
               index={index}
               startsTurn={startsTurn}
@@ -488,7 +489,7 @@ const Paragraph = memo(function Paragraph({
               const prefix = wordIndex > 0 && !isPunctuation(word.text) ? " " : null;
               if (editingWords) {
                 return (
-                  <Fragment key={`${word.start}-${word.end}`}>
+                  <Fragment key={`${wordIndex}-${word.start}-${word.end}`}>
                     {prefix}
                     <button
                       type="button"
@@ -516,7 +517,7 @@ const Paragraph = memo(function Paragraph({
               }
               if (!onSeek) {
                 return (
-                  <Fragment key={`${word.start}-${word.end}`}>
+                  <Fragment key={`${wordIndex}-${word.start}-${word.end}`}>
                     {prefix}
                     <span
                       className={
@@ -531,7 +532,7 @@ const Paragraph = memo(function Paragraph({
                 );
               }
               return (
-                <Fragment key={`${word.start}-${word.end}`}>
+                <Fragment key={`${wordIndex}-${word.start}-${word.end}`}>
                   {prefix}
                   <button
                     type="button"
