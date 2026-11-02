@@ -52,9 +52,11 @@ describe("positionWordCorrection", () => {
       scrollAmount: 281,
     };
 
-    expect(
-      positionWordCorrection(crampedAnchor, compactPopover, crampedViewport),
-    ).toMatchObject({ placement: "below", maxHeight: 34, scrollBy: 281 });
+    expect(positionWordCorrection(crampedAnchor, compactPopover, crampedViewport)).toMatchObject({
+      placement: "below",
+      maxHeight: 34,
+      scrollBy: 281,
+    });
 
     const scrolled = positionWordCorrection(
       { ...crampedAnchor, top: 206, bottom: 229 },

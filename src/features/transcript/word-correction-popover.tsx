@@ -7,10 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  positionWordCorrection,
-  type WordCorrectionPosition,
-} from "./word-correction-position";
+import { positionWordCorrection, type WordCorrectionPosition } from "./word-correction-position";
 
 export function WordCorrectionPopover({
   anchor,
@@ -55,7 +52,9 @@ export function WordCorrectionPopover({
       }
       return;
     }
-    const topbar = document.querySelector<HTMLElement>("[data-app-topbar]")?.getBoundingClientRect();
+    const topbar = document
+      .querySelector<HTMLElement>("[data-app-topbar]")
+      ?.getBoundingClientRect();
     const readingDock = document
       .querySelector<HTMLElement>("[data-reading-dock]")
       ?.getBoundingClientRect();
@@ -80,9 +79,7 @@ export function WordCorrectionPopover({
         width: window.innerWidth,
         height: window.innerHeight,
         topInset,
-        scrollAmount: readingDock
-          ? Math.max(0, readingDock.top - (topbar?.bottom ?? 0))
-          : 0,
+        scrollAmount: readingDock ? Math.max(0, readingDock.top - (topbar?.bottom ?? 0)) : 0,
       },
       allowRoomScroll,
     );
@@ -216,7 +213,9 @@ export function WordCorrectionPopover({
         aria-describedby={[
           "word-correction-popover-hint",
           error ? "word-correction-popover-error" : null,
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onChange={(event) => onChange(event.target.value)}
         onBlur={(event) => onInputBlur(event.relatedTarget)}
         onKeyDown={onInputKeyDown}
@@ -230,7 +229,9 @@ export function WordCorrectionPopover({
         className="absolute top-3 right-3 grid size-8 shrink-0 basis-8 cursor-pointer place-items-center rounded-control border border-rule bg-transparent p-0 text-ink-2 transition-[color,background,border-color] duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink"
         data-word-correction-action="close"
         aria-label="Close word editor"
-        onPointerDown={() => { suppressBlurRef.current = true; }}
+        onPointerDown={() => {
+          suppressBlurRef.current = true;
+        }}
         onClick={cancelCurrent}
         onKeyDown={onCloseKeyDown}
       >
@@ -251,9 +252,17 @@ export function WordCorrectionPopover({
         id="word-correction-popover-hint"
         className="flex items-center gap-1.75 font-ui text-fine leading-[1.35] text-ink-2"
       >
-        <span><kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Enter</kbd> applies</span>
-        <span aria-hidden="true" className="text-rule">·</span>
-        <span><kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Esc</kbd> restores</span>
+        <span>
+          <kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Enter</kbd>{" "}
+          applies
+        </span>
+        <span aria-hidden="true" className="text-rule">
+          ·
+        </span>
+        <span>
+          <kbd className="border-0 bg-transparent p-0 font-mono text-label text-ink-3">Esc</kbd>{" "}
+          restores
+        </span>
       </span>
       {error && (
         <span

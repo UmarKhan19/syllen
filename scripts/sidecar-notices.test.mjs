@@ -43,27 +43,62 @@ test("collects locked npm and Rust notices plus app documents and fonts", async 
     await write("LICENSE", "app license bytes");
     await write("THIRD_PARTY_NOTICES.md", "app notice bytes");
     await write("public/fonts/test-OFL.txt", "font OFL bytes");
-    await write("package.json", JSON.stringify({ dependencies: {
-      "fixture-ui": "1.0.0", "fixture-dal": "1.0.0",
-    } }));
-    await write("package-lock.json", JSON.stringify({ packages: {
-      "node_modules/fixture-ui": { version: "1.0.0", resolved: "https://npm.test/fixture-ui.tgz" },
-      "node_modules/fixture-dal": { version: "1.0.0", resolved: "https://npm.test/fixture-dal.tgz" },
-    } }));
-    await write("node_modules/fixture-ui/package.json", JSON.stringify({
-      name: "fixture-ui", version: "1.0.0", license: "Apache-2.0", dependencies: {},
-    }));
+    await write(
+      "package.json",
+      JSON.stringify({
+        dependencies: {
+          "fixture-ui": "1.0.0",
+          "fixture-dal": "1.0.0",
+        },
+      }),
+    );
+    await write(
+      "package-lock.json",
+      JSON.stringify({
+        packages: {
+          "node_modules/fixture-ui": {
+            version: "1.0.0",
+            resolved: "https://npm.test/fixture-ui.tgz",
+          },
+          "node_modules/fixture-dal": {
+            version: "1.0.0",
+            resolved: "https://npm.test/fixture-dal.tgz",
+          },
+        },
+      }),
+    );
+    await write(
+      "node_modules/fixture-ui/package.json",
+      JSON.stringify({
+        name: "fixture-ui",
+        version: "1.0.0",
+        license: "Apache-2.0",
+        dependencies: {},
+      }),
+    );
     await write("node_modules/fixture-ui/NOTICE.txt", "npm notice bytes");
-    await write("node_modules/fixture-dal/package.json", JSON.stringify({
-      name: "fixture-dal", version: "1.0.0", license: "SEE LICENSE IN LICENSE.md", dependencies: {},
-    }));
+    await write(
+      "node_modules/fixture-dal/package.json",
+      JSON.stringify({
+        name: "fixture-dal",
+        version: "1.0.0",
+        license: "SEE LICENSE IN LICENSE.md",
+        dependencies: {},
+      }),
+    );
     await write("node_modules/fixture-dal/LICENSE.md", "DAL license pointer bytes");
     await write("src-tauri/sidecar/package.json", JSON.stringify({ dependencies: {} }));
     await write("src-tauri/sidecar/package-lock.json", JSON.stringify({ packages: {} }));
     await write("src-tauri/Cargo.toml", "[package]\nname='fixture'\n");
-    await write("src-tauri/crates/cssparser/Cargo.toml", "[package]\nname='cssparser'\nversion='0.37.0'\n");
+    await write(
+      "src-tauri/crates/cssparser/Cargo.toml",
+      "[package]\nname='cssparser'\nversion='0.37.0'\n",
+    );
     await write("src-tauri/crates/cssparser/LICENSE", "crate license bytes");
-    await write("src-tauri/crates/noticecrate/Cargo.toml", "[package]\nname='noticecrate'\nversion='1.2.3'\n");
+    await write(
+      "src-tauri/crates/noticecrate/Cargo.toml",
+      "[package]\nname='noticecrate'\nversion='1.2.3'\n",
+    );
     await write("src-tauri/crates/noticecrate/COPYRIGHT", "crate copyright bytes");
     await write("src-tauri/crates/noticecrate/NOTICE.txt", "crate notice bytes");
     const rootId = "path+file:///fixture#fixture@0.1.0";
@@ -74,30 +109,46 @@ test("collects locked npm and Rust notices plus app documents and fonts", async 
       resolve: {
         root: rootId,
         nodes: [
-          { id: rootId, deps: [
-            { pkg: crateId, dep_kinds: [{ kind: null }] },
-            { pkg: noticeCrateId, dep_kinds: [{ kind: null }] },
-            { pkg: buildCrateId, dep_kinds: [{ kind: "build" }] },
-          ] },
+          {
+            id: rootId,
+            deps: [
+              { pkg: crateId, dep_kinds: [{ kind: null }] },
+              { pkg: noticeCrateId, dep_kinds: [{ kind: null }] },
+              { pkg: buildCrateId, dep_kinds: [{ kind: "build" }] },
+            ],
+          },
           { id: crateId, deps: [] },
           { id: noticeCrateId, deps: [] },
           { id: buildCrateId, deps: [] },
         ],
       },
       packages: [
-        { id: rootId, name: "fixture", version: "0.1.0", manifest_path: join(root, "src-tauri/Cargo.toml") },
         {
-          id: crateId, name: "cssparser", version: "0.37.0", license: "MPL-2.0",
+          id: rootId,
+          name: "fixture",
+          version: "0.1.0",
+          manifest_path: join(root, "src-tauri/Cargo.toml"),
+        },
+        {
+          id: crateId,
+          name: "cssparser",
+          version: "0.37.0",
+          license: "MPL-2.0",
           authors: ["Fixture Author <private@example.invalid>"],
           manifest_path: join(root, "src-tauri/crates/cssparser/Cargo.toml"),
           repository: "https://github.com/servo/rust-cssparser",
         },
         {
-          id: noticeCrateId, name: "noticecrate", version: "1.2.3", license: "MIT",
+          id: noticeCrateId,
+          name: "noticecrate",
+          version: "1.2.3",
+          license: "MIT",
           manifest_path: join(root, "src-tauri/crates/noticecrate/Cargo.toml"),
         },
         {
-          id: buildCrateId, name: "build-only", version: "1.0.0",
+          id: buildCrateId,
+          name: "build-only",
+          version: "1.0.0",
           manifest_path: join(root, "src-tauri/crates/build-only/Cargo.toml"),
         },
       ],
@@ -123,27 +174,52 @@ test("collects locked npm and Rust notices plus app documents and fonts", async 
     assert.ok(manifest.files.some(({ path }) => path === "THIRD_PARTY_NOTICES.md"));
     assert.ok(manifest.files.some(({ path }) => path === "fonts/test-OFL.txt"));
     assert.ok(manifest.files.some(({ path }) => path === "spdx/Apache-2.0.txt"));
-    assert.match(await readFile(join(directory, "rust/MPL-2.0-SOURCE-LINKS.txt"), "utf8"),
-      /cssparser@0\.37\.0 \| authors:.*source: https:\/\/crates\.io\/api\/v1\/crates\/cssparser\/0\.37\.0\/download/);
-    assert.equal((await readFile(join(directory, "LICENSE"), "utf8")), "app license bytes");
-    assert.equal((await readFile(join(directory, "THIRD_PARTY_NOTICES.md"), "utf8")), "app notice bytes");
-    assert.equal((await readFile(join(directory, "fonts/test-OFL.txt"), "utf8")), "font OFL bytes");
-    assert.equal((await readFile(join(directory, "rust/cssparser@0.37.0/LICENSE"), "utf8")), "crate license bytes");
-    assert.equal((await readFile(join(directory, "npm/frontend/fixture-ui@1.0.0/NOTICE.txt"), "utf8")), "npm notice bytes");
-    assert.ok(manifest.npmPackages.find(({ name }) => name === "fixture-ui").licenseFiles.includes("spdx/Apache-2.0.txt"));
-    assert.equal((await readFile(join(directory, "npm/frontend/fixture-dal@1.0.0/LICENSE.md"), "utf8")), "DAL license pointer bytes");
+    assert.match(
+      await readFile(join(directory, "rust/MPL-2.0-SOURCE-LINKS.txt"), "utf8"),
+      /cssparser@0\.37\.0 \| authors:.*source: https:\/\/crates\.io\/api\/v1\/crates\/cssparser\/0\.37\.0\/download/,
+    );
+    assert.equal(await readFile(join(directory, "LICENSE"), "utf8"), "app license bytes");
+    assert.equal(
+      await readFile(join(directory, "THIRD_PARTY_NOTICES.md"), "utf8"),
+      "app notice bytes",
+    );
+    assert.equal(await readFile(join(directory, "fonts/test-OFL.txt"), "utf8"), "font OFL bytes");
+    assert.equal(
+      await readFile(join(directory, "rust/cssparser@0.37.0/LICENSE"), "utf8"),
+      "crate license bytes",
+    );
+    assert.equal(
+      await readFile(join(directory, "npm/frontend/fixture-ui@1.0.0/NOTICE.txt"), "utf8"),
+      "npm notice bytes",
+    );
+    assert.ok(
+      manifest.npmPackages
+        .find(({ name }) => name === "fixture-ui")
+        .licenseFiles.includes("spdx/Apache-2.0.txt"),
+    );
+    assert.equal(
+      await readFile(join(directory, "npm/frontend/fixture-dal@1.0.0/LICENSE.md"), "utf8"),
+      "DAL license pointer bytes",
+    );
     assert.ok(!requestedUrls.some((url) => url.includes("LicenseRef-DAL")));
     const noticeCrate = manifest.rustPackages.find(({ name }) => name === "noticecrate");
     assert.ok(noticeCrate.licenseFiles.includes("rust/noticecrate@1.2.3/COPYRIGHT"));
     assert.ok(noticeCrate.licenseFiles.includes("rust/noticecrate@1.2.3/NOTICE.txt"));
     assert.ok(noticeCrate.licenseFiles.includes("spdx/MIT.txt"));
-    assert.equal((await readFile(join(directory, "rust/noticecrate@1.2.3/COPYRIGHT"), "utf8")), "crate copyright bytes");
-    assert.equal((await readFile(join(directory, "rust/noticecrate@1.2.3/NOTICE.txt"), "utf8")), "crate notice bytes");
-    const spdxUrl = "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/Apache-2.0.txt";
-    assert.equal((await readFile(join(directory, "spdx/Apache-2.0.txt"), "utf8")), `raw:${spdxUrl}`);
+    assert.equal(
+      await readFile(join(directory, "rust/noticecrate@1.2.3/COPYRIGHT"), "utf8"),
+      "crate copyright bytes",
+    );
+    assert.equal(
+      await readFile(join(directory, "rust/noticecrate@1.2.3/NOTICE.txt"), "utf8"),
+      "crate notice bytes",
+    );
+    const spdxUrl =
+      "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/Apache-2.0.txt";
+    assert.equal(await readFile(join(directory, "spdx/Apache-2.0.txt"), "utf8"), `raw:${spdxUrl}`);
     assert.equal(manifest.files.find(({ path }) => path === "spdx/Apache-2.0.txt").source, spdxUrl);
     const mitUrl = "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt";
-    assert.equal((await readFile(join(directory, "spdx/MIT.txt"), "utf8")), `raw:${mitUrl}`);
+    assert.equal(await readFile(join(directory, "spdx/MIT.txt"), "utf8"), `raw:${mitUrl}`);
     assert.equal(manifest.files.find(({ path }) => path === "spdx/MIT.txt").source, mitUrl);
     assert.doesNotMatch(JSON.stringify(manifest), /\/home\/|private@example\.invalid/);
     for (const { path, source, sha256 } of manifest.files) {

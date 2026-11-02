@@ -39,8 +39,7 @@ function paintWave(
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, width, WAVE_HEIGHT);
 
-  const progress =
-    duration > 0 ? clamp(at / duration, 0, 1) * width : 0;
+  const progress = duration > 0 ? clamp(at / duration, 0, 1) * width : 0;
 
   if (peaks.length === 0) {
     context.fillStyle = colors.rest;
@@ -51,21 +50,14 @@ function paintWave(
     const bars = Math.max(1, Math.floor(width / WAVE_PITCH));
     for (let index = 0; index < bars; index += 1) {
       const from = Math.floor((index * peaks.length) / bars);
-      const to = Math.max(
-        from + 1,
-        Math.floor(((index + 1) * peaks.length) / bars),
-      );
+      const to = Math.max(from + 1, Math.floor(((index + 1) * peaks.length) / bars));
       let peak = 0;
       for (let sample = from; sample < to; sample += 1) {
         peak = Math.max(peak, peaks[sample] ?? 0);
       }
-      const height = Math.max(
-        2,
-        Math.round(Math.pow(peak / 255, 0.72) * (WAVE_HEIGHT - 4)),
-      );
+      const height = Math.max(2, Math.round(Math.pow(peak / 255, 0.72) * (WAVE_HEIGHT - 4)));
       const x = index * WAVE_PITCH;
-      context.fillStyle =
-        x + WAVE_BAR > progress ? colors.rest : colors.played;
+      context.fillStyle = x + WAVE_BAR > progress ? colors.rest : colors.played;
       context.fillRect(x, (WAVE_HEIGHT - height) / 2, WAVE_BAR, height);
     }
   }
@@ -252,9 +244,7 @@ export function PlayerBar({
 
   const tip = (scrub ?? hover) !== null && duration > 0 ? (scrub ?? hover) : null;
   const tipLeft =
-    tip !== null && width > 0
-      ? clamp((tip / duration) * width, 26, Math.max(26, width - 26))
-      : 0;
+    tip !== null && width > 0 ? clamp((tip / duration) * width, 26, Math.max(26, width - 26)) : 0;
 
   return (
     <section
@@ -291,9 +281,7 @@ export function PlayerBar({
           className="inline-flex flex-none items-baseline gap-1.25 whitespace-nowrap font-mono text-[11.5px] tabular-nums text-ink-3"
           aria-hidden="true"
         >
-          <span className="min-w-[5ch] text-right text-ink">
-            {formatClock(shown)}
-          </span>
+          <span className="min-w-[5ch] text-right text-ink">{formatClock(shown)}</span>
           <span className="text-rule">/</span>
           <span className="min-w-[4ch]">{formatClock(duration)}</span>
         </span>
@@ -303,9 +291,7 @@ export function PlayerBar({
         <canvas
           ref={canvasRef}
           className={`block w-full touch-none ${
-            playback.canSeek
-              ? "cursor-pointer active:cursor-ew-resize"
-              : "cursor-default"
+            playback.canSeek ? "cursor-pointer active:cursor-ew-resize" : "cursor-default"
           }${pointerFocus ? " focus-visible:outline-none" : ""}`}
           style={{ height: WAVE_HEIGHT }}
           role="slider"
@@ -342,14 +328,10 @@ export function PlayerBar({
               ? "border-transparent bg-transparent text-ink-3 hover:bg-wash hover:text-ink"
               : "border-rule bg-sheet text-ink hover:border-rule-strong"
           }`}
-          onClick={
-            playback.follow ? playback.stopFollowing : playback.followTranscript
-          }
+          onClick={playback.follow ? playback.stopFollowing : playback.followTranscript}
           aria-pressed={playback.follow}
           title={
-            playback.follow
-              ? "Stop following the transcript"
-              : "Scroll to the current passage"
+            playback.follow ? "Stop following the transcript" : "Scroll to the current passage"
           }
         >
           <FollowIcon />

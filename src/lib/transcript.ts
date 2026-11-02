@@ -20,13 +20,8 @@ export interface Segment {
 
 export type SpeakerNames = Partial<Record<number, string>>;
 
-export const speakerLabel = (
-  speaker: number | null,
-  speakerNames: SpeakerNames = {},
-) =>
-  speaker === null
-    ? "Unknown speaker"
-    : speakerNames[speaker]?.trim() || `Speaker ${speaker + 1}`;
+export const speakerLabel = (speaker: number | null, speakerNames: SpeakerNames = {}) =>
+  speaker === null ? "Unknown speaker" : speakerNames[speaker]?.trim() || `Speaker ${speaker + 1}`;
 
 const PUNCTUATION_ONLY = /^[.,!?;:…)»"']+$/;
 
@@ -91,8 +86,14 @@ export function replaceWordText(
 }
 
 export function sameWordTexts(left: Word[], right: Word[]): boolean {
-  return left.length === right.length && left.every(
-    (word, index) => word.text === right[index].text && word.start === right[index].start && word.end === right[index].end,
+  return (
+    left.length === right.length &&
+    left.every(
+      (word, index) =>
+        word.text === right[index].text &&
+        word.start === right[index].start &&
+        word.end === right[index].end,
+    )
   );
 }
 

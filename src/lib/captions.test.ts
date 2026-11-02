@@ -9,7 +9,10 @@ const words: Word[] = [
   { text: "are", start: 1.6, end: 1.8 },
   { text: "you?", start: 1.8, end: 2.1 },
 ];
-const turns = [{ speaker: 0, start: 0, end: 1.0 }, { speaker: 1, start: 1.2, end: 2.5 }];
+const turns = [
+  { speaker: 0, start: 0, end: 1.0 },
+  { speaker: 1, start: 1.2, end: 2.5 },
+];
 
 describe("captions", () => {
   it.each([
@@ -24,7 +27,11 @@ describe("captions", () => {
   });
 
   it("splits long runs into cues and writes SRT", () => {
-    const long = Array.from({ length: 40 }, (_, index) => ({ text: `word${index}`, start: index * 0.5, end: index * 0.5 + 0.4 }));
+    const long = Array.from({ length: 40 }, (_, index) => ({
+      text: `word${index}`,
+      start: index * 0.5,
+      end: index * 0.5 + 0.4,
+    }));
     const cues = buildCues(mergeWords(long, [{ speaker: 0, start: 0, end: 30 }]));
     expect(cues.length).toBeGreaterThan(1);
     cues.forEach((cue) => expect(cue.text.length).toBeLessThanOrEqual(90));

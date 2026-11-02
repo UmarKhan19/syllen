@@ -64,9 +64,7 @@ describe("wavPcm16ToFloat32", () => {
   });
 
   it("skips unrelated chunks with odd padding", () => {
-    const samples = wavPcm16ToFloat32(
-      wav({ samples: [100, -100], extraChunk: true }),
-    );
+    const samples = wavPcm16ToFloat32(wav({ samples: [100, -100], extraChunk: true }));
     expect(samples?.length).toBe(2);
     expect(samples![0]).toBeCloseTo(100 / 32768);
   });

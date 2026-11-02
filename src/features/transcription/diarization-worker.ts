@@ -44,9 +44,7 @@ scope.onmessage = async (event) => {
     // Drop the source bytes before the model load and the diarization pass.
     request.audio = new ArrayBuffer(0);
     if (!samples) throw new Error("The audio was not 16 kHz mono PCM.");
-    const who = await load((fraction) =>
-      post({ type: "progress", id, phase: "model", fraction }),
-    );
+    const who = await load((fraction) => post({ type: "progress", id, phase: "model", fraction }));
     post({ type: "progress", id, phase: "diarize", fraction: null });
     const result = await who.diarize({ samples, sampleRate: 16_000 });
     post({

@@ -10,12 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  isPunctuation,
-  speakerLabel,
-  type Segment,
-  type Word,
-} from "../../lib/transcript";
+import { isPunctuation, speakerLabel, type Segment, type Word } from "../../lib/transcript";
 import { formatClock } from "../../lib/captions";
 import { WordCorrectionPopover } from "./word-correction-popover";
 import { useWordCorrections } from "./use-word-corrections";
@@ -39,8 +34,7 @@ const whoBase =
 
 const speechFrame = "pl-5 compact:block compact:mt-1.5 compact:pl-0";
 
-const proseBase =
-  "m-0 max-w-[92ch] font-text text-prose text-speech text-pretty";
+const proseBase = "m-0 max-w-[92ch] font-text text-prose text-speech text-pretty";
 
 /* Word-correction targets inherit the prose face; only the box is reset. */
 const wordEditFrame =
@@ -73,11 +67,7 @@ export const Transcript = memo(function Transcript({
   speakerNames: Record<number, string>;
   onRename: (speaker: number, name: string) => void;
   canEditWords: boolean;
-  onSaveWords: (
-    expected: Word[],
-    corrected: Word[],
-    segments: Segment[],
-  ) => Promise<void>;
+  onSaveWords: (expected: Word[], corrected: Word[], segments: Segment[]) => Promise<void>;
   onEditStateChange: (editing: boolean, saving?: boolean, dirty?: boolean) => void;
   actionHost: HTMLDivElement | null;
   errorHost: HTMLDivElement | null;
@@ -95,12 +85,30 @@ export const Transcript = memo(function Transcript({
   const returnFocusIndexRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    editingWords, renderedSegments, editingWord, wordDraft, wordError, savingWords,
-    wordInputRef, wordAnchorRef, wordFocusToken, hasWordChanges,
-    beginWordEdit, applyWord, beginWord, cancelWordEdits, cancelWordInput,
-    updateWordDraft, saveWordEdits,
+    editingWords,
+    renderedSegments,
+    editingWord,
+    wordDraft,
+    wordError,
+    savingWords,
+    wordInputRef,
+    wordAnchorRef,
+    wordFocusToken,
+    hasWordChanges,
+    beginWordEdit,
+    applyWord,
+    beginWord,
+    cancelWordEdits,
+    cancelWordInput,
+    updateWordDraft,
+    saveWordEdits,
   } = useWordCorrections({
-    segments, onSaveWords, onEditStateChange, onFollowOff, editButtonRef, toolbarCancelRef,
+    segments,
+    onSaveWords,
+    onEditStateChange,
+    onFollowOff,
+    editButtonRef,
+    toolbarCancelRef,
   });
   const reduceMotion = useMemo(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -123,9 +131,7 @@ export const Transcript = memo(function Transcript({
     } else if (returnFocusIndexRef.current !== null) {
       const index = returnFocusIndexRef.current;
       returnFocusIndexRef.current = null;
-      document
-        .querySelector<HTMLButtonElement>(`[data-segment-index="${index}"]`)
-        ?.focus();
+      document.querySelector<HTMLButtonElement>(`[data-segment-index="${index}"]`)?.focus();
     }
   }, [editingIndex]);
 
@@ -146,11 +152,7 @@ export const Transcript = memo(function Transcript({
     const onKey = (event: KeyboardEvent) => {
       if (!["PageDown", "PageUp", "Home", "End"].includes(event.key)) return;
       const target = event.target as HTMLElement | null;
-      if (
-        target?.closest(
-          "input, textarea, button, canvas, [contenteditable='true']",
-        )
-      ) {
+      if (target?.closest("input, textarea, button, canvas, [contenteditable='true']")) {
         return;
       }
       stop();
@@ -197,75 +199,80 @@ export const Transcript = memo(function Transcript({
   }
   const labelled = segments.some((segment) => segment.speaker !== null);
   const editingLabel = editingWord
-    ? renderedSegments[editingWord.segment]?.words[editingWord.word]?.text ?? "word"
+    ? (renderedSegments[editingWord.segment]?.words[editingWord.word]?.text ?? "word")
     : "word";
   return (
     <>
-      {canEditWords && actionHost && createPortal(
-        editingWords ? (
-          <>
-            <div className="flex flex-none gap-1.5">
+      {canEditWords &&
+        actionHost &&
+        createPortal(
+          editingWords ? (
+            <>
+              <div className="flex flex-none gap-1.5">
+                <button
+                  ref={toolbarCancelRef}
+                  type="button"
+                  className="h-8 px-2.25 py-0 border border-rule rounded-control bg-transparent text-ink-2 text-fine whitespace-nowrap cursor-pointer [transition:background_.15s_ease,border-color_.15s_ease,color_.15s_ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:opacity-45 disabled:cursor-not-allowed"
+                  data-word-correction-action="cancel"
+                  onClick={cancelWordEdits}
+                  disabled={savingWords}
+                >
+                  Cancel
+                </button>
+                <button
+                  ref={toolbarSaveRef}
+                  type="button"
+                  className="h-8 px-2.25 py-0 border border-ink rounded-card bg-ink text-on-ink text-fine font-semibold tracking-[-0.002em] whitespace-nowrap cursor-pointer [transition:background_.15s_ease,box-shadow_.15s_ease,transform_.05s_ease] enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover enabled:active:[transform:translateY(1px)] disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink disabled:cursor-not-allowed disabled:opacity-45"
+                  data-word-correction-action="save"
+                  onClick={saveWordEdits}
+                  disabled={savingWords || !hasWordChanges}
+                >
+                  {savingWords ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
               <button
-                ref={toolbarCancelRef}
+                ref={editButtonRef}
                 type="button"
-                className="h-8 px-2.25 py-0 border border-rule rounded-control bg-transparent text-ink-2 text-fine whitespace-nowrap cursor-pointer [transition:background_.15s_ease,border-color_.15s_ease,color_.15s_ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:opacity-45 disabled:cursor-not-allowed"
-                data-word-correction-action="cancel"
-                onClick={cancelWordEdits}
-                disabled={savingWords}
+                className="group relative grid h-9 w-9 grow-0 shrink-0 basis-9 place-items-center rounded-none border-0 bg-transparent p-0 text-ink-2 cursor-pointer [transition:color_.15s_ease,background_.15s_ease,border-color_.15s_ease] hover:bg-sheet hover:text-ink enabled:hover:bg-wash focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:-outline-offset-3 disabled:opacity-45 disabled:cursor-not-allowed"
+                aria-label="Edit words"
+                aria-describedby="edit-words-tooltip"
+                onClick={beginWordEdit}
+                disabled={editingIndex !== null}
               >
-                Cancel
+                <PencilIcon />
+                <span
+                  id="edit-words-tooltip"
+                  className="pointer-events-none invisible absolute top-full right-0 z-50 mt-1.75 rounded-[5px] border border-rule bg-sheet px-2 py-1.25 text-fine font-normal leading-[1.3] whitespace-nowrap text-ink-2 opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+                  role="tooltip"
+                >
+                  Edit words
+                </span>
               </button>
-              <button
-                ref={toolbarSaveRef}
-                type="button"
-                className="h-8 px-2.25 py-0 border border-ink rounded-card bg-ink text-on-ink text-fine font-semibold tracking-[-0.002em] whitespace-nowrap cursor-pointer [transition:background_.15s_ease,box-shadow_.15s_ease,transform_.05s_ease] enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover enabled:active:[transform:translateY(1px)] disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink disabled:cursor-not-allowed disabled:opacity-45"
-                data-word-correction-action="save"
-                onClick={saveWordEdits}
-                disabled={savingWords || !hasWordChanges}
-              >
-                {savingWords ? "Saving…" : "Save changes"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <button
-              ref={editButtonRef}
-              type="button"
-              className="group relative grid h-9 w-9 grow-0 shrink-0 basis-9 place-items-center rounded-none border-0 bg-transparent p-0 text-ink-2 cursor-pointer [transition:color_.15s_ease,background_.15s_ease,border-color_.15s_ease] hover:bg-sheet hover:text-ink enabled:hover:bg-wash focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:-outline-offset-3 disabled:opacity-45 disabled:cursor-not-allowed"
-              aria-label="Edit words"
-              aria-describedby="edit-words-tooltip"
-              onClick={beginWordEdit}
-              disabled={editingIndex !== null}
-            >
-              <PencilIcon />
-              <span
-                id="edit-words-tooltip"
-                className="pointer-events-none invisible absolute top-full right-0 z-50 mt-1.75 rounded-[5px] border border-rule bg-sheet px-2 py-1.25 text-fine font-normal leading-[1.3] whitespace-nowrap text-ink-2 opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
-                role="tooltip"
-              >
-                Edit words
-              </span>
-            </button>
-            {editingIndex !== null && (
-              <span className="m-0 max-w-[120px] text-fine leading-[1.25] whitespace-normal text-ink-3">
-                Finish speaker renaming first.
-              </span>
-            )}
-          </>
-        ),
-        actionHost,
-      )}
-      {canEditWords && errorHost && wordError && createPortal(
-        <span
-          id="word-correction-error"
-          className="m-0 block text-fine leading-[1.4] whitespace-normal wrap-anywhere text-alert"
-          role="alert"
-        >
-          Not saved: {wordError}
-        </span>,
-        errorHost,
-      )}
+              {editingIndex !== null && (
+                <span className="m-0 max-w-[120px] text-fine leading-[1.25] whitespace-normal text-ink-3">
+                  Finish speaker renaming first.
+                </span>
+              )}
+            </>
+          ),
+          actionHost,
+        )}
+      {canEditWords &&
+        errorHost &&
+        wordError &&
+        createPortal(
+          <span
+            id="word-correction-error"
+            className="m-0 block text-fine leading-[1.4] whitespace-normal wrap-anywhere text-alert"
+            role="alert"
+          >
+            Not saved: {wordError}
+          </span>,
+          errorHost,
+        )}
       {editingWord !== null && wordAnchorRef.current && (
         <WordCorrectionPopover
           anchor={wordAnchorRef.current}
@@ -284,93 +291,92 @@ export const Transcript = memo(function Transcript({
         className={`${transcriptRule} ${labelled ? "before:left-margin" : "before:left-[58px]"}`}
         ref={containerRef}
       >
-      {renderedSegments.map((segment, index) => {
-        const startsTurn =
-          index === 0 || segment.speaker !== segments[index - 1].speaker;
-        const speaker = segment.speaker;
-        const label = speakerLabel(speaker, speakerNames);
-        const editing = editingIndex === index && speaker !== null && !editingWords;
+        {renderedSegments.map((segment, index) => {
+          const startsTurn = index === 0 || segment.speaker !== segments[index - 1].speaker;
+          const speaker = segment.speaker;
+          const label = speakerLabel(speaker, speakerNames);
+          const editing = editingIndex === index && speaker !== null && !editingWords;
 
-        if (editing) {
-          return (
-            <div
-              className={`${paraFrame} ${paraColumns}${startsTurn ? " mt-7.5 first:mt-3" : ""}`}
-              data-para-index={index}
-              key={`${segment.start}-${index}`}
-            >
-              <TimeCode
-                start={segment.start}
-                onSeek={onSeek}
-                current={active.segment === index}
-              />
-              <form
-                className="relative z-[1] col-start-2 col-end-[-1] bg-paper pt-1.25 pr-0 pb-2 pl-0 compact:py-2"
-                onSubmit={saveName}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    closeEditor();
-                  }
-                }}
+          if (editing) {
+            return (
+              <div
+                className={`${paraFrame} ${paraColumns}${startsTurn ? " mt-7.5 first:mt-3" : ""}`}
+                data-para-index={index}
+                key={`${segment.start}-${index}`}
               >
-                <div className="flex items-center gap-2 max-w-[520px] compact:max-w-full">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={draftName}
-                    onChange={(event) => setDraftName(event.target.value)}
-                    aria-label={`Name for ${label}`}
-                    maxLength={48}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="flex-1 min-w-0 h-9 px-2.5 py-0 border border-rule rounded-control bg-sheet text-small focus:outline-none focus:border-ink focus:shadow-focus"
-                  />
-                  <button
-                    type="submit"
-                    className={`${ghostBase} border-ink bg-ink text-paper enabled:hover:border-ink-deep enabled:hover:bg-ink-deep`}
-                    disabled={!draftName.trim()}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    className={`${ghostBase} border-rule bg-transparent text-ink-2 enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink`}
-                    onClick={closeEditor}
-                  >
-                    Cancel
-                  </button>
+                <TimeCode
+                  start={segment.start}
+                  onSeek={onSeek}
+                  current={active.segment === index}
+                />
+                <form
+                  className="relative z-[1] col-start-2 col-end-[-1] bg-paper pt-1.25 pr-0 pb-2 pl-0 compact:py-2"
+                  onSubmit={saveName}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closeEditor();
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2 max-w-[520px] compact:max-w-full">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      aria-label={`Name for ${label}`}
+                      maxLength={48}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="flex-1 min-w-0 h-9 px-2.5 py-0 border border-rule rounded-control bg-sheet text-small focus:outline-none focus:border-ink focus:shadow-focus"
+                    />
+                    <button
+                      type="submit"
+                      className={`${ghostBase} border-ink bg-ink text-paper enabled:hover:border-ink-deep enabled:hover:bg-ink-deep`}
+                      disabled={!draftName.trim()}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className={`${ghostBase} border-rule bg-transparent text-ink-2 enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink`}
+                      onClick={closeEditor}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="mt-1.5 mb-0 text-[11.5px] leading-[1.45] text-ink-3">
+                    Changes all {speakerCounts[speaker] ?? 0} transcript{" "}
+                    {(speakerCounts[speaker] ?? 0) === 1 ? "passage" : "passages"} and export
+                    labels.
+                  </p>
+                </form>
+                <div className="col-start-2 col-end-[-1] mt-2.5">
+                  <p className={proseBase}>{segment.text}</p>
                 </div>
-                <p className="mt-1.5 mb-0 text-[11.5px] leading-[1.45] text-ink-3">
-                  Changes all {speakerCounts[speaker] ?? 0} transcript{" "}
-                  {(speakerCounts[speaker] ?? 0) === 1 ? "passage" : "passages"} and
-                  export labels.
-                </p>
-              </form>
-              <div className="col-start-2 col-end-[-1] mt-2.5">
-                <p className={proseBase}>{segment.text}</p>
               </div>
-            </div>
-          );
-        }
+            );
+          }
 
-        return (
-          <Paragraph
-            key={`${segment.start}-${index}`}
-            segment={segment}
-            index={index}
-            startsTurn={startsTurn}
-            labelled={labelled}
-            current={active.segment === index}
-            activeWord={active.segment === index ? active.word : -1}
-            label={label}
-            onSeek={onSeek}
-            onBeginEdit={beginEdit}
-            editingWords={editingWords}
-            editingWord={editingWord?.segment === index ? editingWord.word : null}
-            onBeginWord={beginWord}
-          />
-        );
-      })}
+          return (
+            <Paragraph
+              key={`${segment.start}-${index}`}
+              segment={segment}
+              index={index}
+              startsTurn={startsTurn}
+              labelled={labelled}
+              current={active.segment === index}
+              activeWord={active.segment === index ? active.word : -1}
+              label={label}
+              onSeek={onSeek}
+              onBeginEdit={beginEdit}
+              editingWords={editingWords}
+              editingWord={editingWord?.segment === index ? editingWord.word : null}
+              onBeginWord={beginWord}
+            />
+          );
+        })}
       </div>
     </>
   );
@@ -401,12 +407,7 @@ const Paragraph = memo(function Paragraph({
   onBeginEdit: (index: number, label: string) => void;
   editingWords: boolean;
   editingWord: number | null;
-  onBeginWord: (
-    index: number,
-    wordIndex: number,
-    word: Word,
-    anchor: HTMLButtonElement,
-  ) => void;
+  onBeginWord: (index: number, wordIndex: number, word: Word, anchor: HTMLButtonElement) => void;
 }) {
   const speaker = segment.speaker;
   return (
@@ -488,14 +489,16 @@ const Paragraph = memo(function Paragraph({
                   onClick={
                     onSeek
                       ? (event) => {
-                          if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+                          if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey)
+                            return;
                           if (window.getSelection()?.isCollapsed === false) return;
                           onSeek(word.start);
                         }
                       : undefined
                   }
                 >
-                  {prefix}{word.text}
+                  {prefix}
+                  {word.text}
                 </span>
               );
             })}
@@ -550,7 +553,5 @@ function PencilIcon({ className }: { className?: string }) {
 }
 
 function speakerTone(speaker: number | null): string {
-  return speaker === null
-    ? "text-ink-3"
-    : (speakerInk[speaker % 4] ?? "text-ink-3");
+  return speaker === null ? "text-ink-3" : (speakerInk[speaker % 4] ?? "text-ink-3");
 }
