@@ -542,8 +542,8 @@ const Paragraph = memo(function Paragraph({
                     onKeyDown={(event) => onWordKeyDown(event, index, wordIndex)}
                     className={
                       current && activeWord === wordIndex
-                        ? "inline border-0 bg-transparent p-0 align-baseline rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
-                        : "inline border-0 bg-transparent p-0 align-baseline cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
+                        ? "inline border-0 bg-transparent p-0 align-baseline select-text rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
+                        : "inline border-0 bg-transparent p-0 align-baseline select-text cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
                     }
                     onClick={(event) => {
                       if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
