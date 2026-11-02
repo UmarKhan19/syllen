@@ -198,13 +198,51 @@ test("media guard extensions match the frontend picker and Rust validator", asyn
   assert.equal(isMediaArtifactPath("public/cover.png"), false);
 });
 
-test("rejects staged library data before invoking the scanner", async () => {
+test("allows staged source files under nested library and jobs directories", async () => {
   const dir = await setup();
   try {
     const envPath = await scanner(dir);
-    await mkdir(path.join(dir, "library"));
-    await writeFile(path.join(dir, "library", "library.db"), "synthetic");
-    assert.equal(git(dir, "add", "--", "library/library.db").status, 0);
+    await writeFile(path.join(dir, "bin", "cargo"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const biome = path.join(dir, "node_modules", ".bin");
+    await mkdir(biome, { recursive: true });
+    await writeFile(path.join(biome, "biome"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    for (const file of ["src/features/library/example.ts", "src-tauri/src/jobs/example.rs"]) {
+      await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+      await writeFile(path.join(dir, file), "source");
+      assert.equal(git(dir, "add", "--", file).status, 0);
+    }
+    const result = runPrecommit(dir, { PATH: envPath });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("rejects staged root jobs and library data directories", async () => {
+  for (const directory of ["jobs", "library"]) {
+    const dir = await setup();
+    try {
+      const envPath = await scanner(dir);
+      await mkdir(path.join(dir, directory));
+      const file = `${directory}/generated.txt`;
+      await writeFile(path.join(dir, file), "app data");
+      assert.equal(git(dir, "add", "--", file).status, 0);
+      const result = runPrecommit(dir, { PATH: envPath });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Refusing staged app data/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+test("rejects staged library database files at any depth", async () => {
+  const dir = await setup();
+  try {
+    const envPath = await scanner(dir);
+    await mkdir(path.join(dir, "src", "features"), { recursive: true });
+    await writeFile(path.join(dir, "src", "features", "library.db"), "synthetic");
+    assert.equal(git(dir, "add", "--", "src/features/library.db").status, 0);
     const before = git(dir, "write-tree").stdout.trim();
     const result = runPrecommit(dir, { PATH: envPath });
     assert.notEqual(result.status, 0);
@@ -312,12 +350,24 @@ test("does not block pre-existing artifacts when unrelated files are staged", as
   }
 });
 
-test("fails closed when Gitleaks is unavailable", async () => {
+test("fails closed when Gitleaks reports an unsupported version", async () => {
   const dir = await setup();
   try {
-    const result = runPrecommit(dir, { PATH: "/usr/bin:/bin" });
+    const bin = path.join(dir, "bin");
+    await mkdir(bin);
+    const marker = path.join(dir, "gitleaks-called");
+    await writeFile(
+      path.join(bin, "gitleaks"),
+      '#!/bin/sh\nprintf called > "$GITLEAKS_STUB_MARKER"\nprintf "unsupported\\n"\n',
+      { mode: 0o755 },
+    );
+    const result = runPrecommit(dir, {
+      PATH: `${bin}:${cleanTestEnv.PATH}`,
+      GITLEAKS_STUB_MARKER: marker,
+    });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Gitleaks is required/);
+    assert.equal(await readFile(marker, "utf8"), "called");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

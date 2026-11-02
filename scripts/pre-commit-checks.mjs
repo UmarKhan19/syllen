@@ -44,7 +44,7 @@ try {
     }
     const lower = file.toLowerCase();
     const dataPath =
-      /(^|\/)(jobs|library)\//.test(lower) || /(^|\/)library\.db(?:-(?:wal|shm))?$/.test(lower);
+      /^(jobs|library)\//.test(lower) || /(^|\/)library\.db(?:-(?:wal|shm))?$/.test(lower);
     const artifact =
       isMediaArtifactPath(file) ||
       /\.(?:onnx|pt|pth|safetensors|gguf|tflite|bin|sqlite3?)$/i.test(file) ||
