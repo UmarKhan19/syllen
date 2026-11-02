@@ -20,13 +20,8 @@ export interface Segment {
 
 export type SpeakerNames = Partial<Record<number, string>>;
 
-export const speakerLabel = (
-  speaker: number | null,
-  speakerNames: SpeakerNames = {},
-) =>
-  speaker === null
-    ? "Unknown speaker"
-    : speakerNames[speaker]?.trim() || `Speaker ${speaker + 1}`;
+export const speakerLabel = (speaker: number | null, speakerNames: SpeakerNames = {}) =>
+  speaker === null ? "Unknown speaker" : speakerNames[speaker]?.trim() || `Speaker ${speaker + 1}`;
 
 const PUNCTUATION_ONLY = /^[.,!?;:…)»"']+$/;
 
@@ -78,7 +73,11 @@ export function replaceWordText(
 ): Segment[] {
   const word = segments[segmentIndex]?.words[wordIndex];
   const corrected = text.trim();
-  if (!word || !corrected || corrected.length > 512 || /[\u0000-\u001f\u007f]/u.test(corrected)) {
+  const hasControlCharacter = Array.from(corrected).some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 0x1f || code === 0x7f;
+  });
+  if (!word || !corrected || corrected.length > 512 || hasControlCharacter) {
     throw new Error("Enter a non-empty correction of 512 characters or fewer.");
   }
   return segments.map((segment, index) => {
@@ -91,8 +90,14 @@ export function replaceWordText(
 }
 
 export function sameWordTexts(left: Word[], right: Word[]): boolean {
-  return left.length === right.length && left.every(
-    (word, index) => word.text === right[index].text && word.start === right[index].start && word.end === right[index].end,
+  return (
+    left.length === right.length &&
+    left.every(
+      (word, index) =>
+        word.text === right[index].text &&
+        word.start === right[index].start &&
+        word.end === right[index].end,
+    )
   );
 }
 

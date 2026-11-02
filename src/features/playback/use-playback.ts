@@ -37,10 +37,7 @@ function announceSeek(audio: HTMLAudioElement, at: number) {
   audio.dispatchEvent(new CustomEvent(SEEK_EVENT, { detail: at }));
 }
 
-export function usePlayback(
-  result: TranscriptResult | null,
-  segments: Segment[],
-): Playback {
+export function usePlayback(result: TranscriptResult | null, segments: Segment[]): Playback {
   const [audio] = useState(() => new Audio());
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(result?.duration ?? 0);
@@ -82,7 +79,7 @@ export function usePlayback(
       audio.load();
       setPlaying(false);
     };
-  }, [audio, audioUrl]);
+  }, [audio, audioUrl, result?.duration]);
 
   useEffect(() => {
     const onPlay = () => setPlaying(true);

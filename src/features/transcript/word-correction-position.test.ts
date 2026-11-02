@@ -52,9 +52,11 @@ describe("positionWordCorrection", () => {
       scrollAmount: 281,
     };
 
-    expect(
-      positionWordCorrection(crampedAnchor, compactPopover, crampedViewport),
-    ).toMatchObject({ placement: "below", maxHeight: 34, scrollBy: 281 });
+    expect(positionWordCorrection(crampedAnchor, compactPopover, crampedViewport)).toMatchObject({
+      placement: "below",
+      maxHeight: 34,
+      scrollBy: 281,
+    });
 
     const scrolled = positionWordCorrection(
       { ...crampedAnchor, top: 206, bottom: 229 },
@@ -62,9 +64,10 @@ describe("positionWordCorrection", () => {
       { ...crampedViewport, topInset: 160 },
       false,
     );
+    if (!scrolled) throw new Error("Expected a visible popover");
     expect(scrolled).toEqual({ left: 8, top: 237, placement: "below" });
-    expect(scrolled!.top).toBeGreaterThanOrEqual(229 + 8);
-    expect(scrolled!.top + compactPopover.height).toBeLessThanOrEqual(560 - 8);
+    expect(scrolled.top).toBeGreaterThanOrEqual(229 + 8);
+    expect(scrolled.top + compactPopover.height).toBeLessThanOrEqual(560 - 8);
   });
 
   it("bounds the popover to real side-room when viewport scrolling is unavailable", () => {
@@ -74,8 +77,9 @@ describe("positionWordCorrection", () => {
       { width: 720, height: 560, topInset: 441 },
       false,
     );
+    if (!bounded) throw new Error("Expected a bounded popover");
     expect(bounded).toEqual({ left: 8, top: 518, placement: "below", maxHeight: 34 });
-    expect(bounded!.top).toBeGreaterThanOrEqual(510 + 8);
+    expect(bounded.top).toBeGreaterThanOrEqual(510 + 8);
   });
 
   it("still requests dock clearance when neither side has current room", () => {

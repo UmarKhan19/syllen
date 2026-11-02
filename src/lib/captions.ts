@@ -13,7 +13,12 @@ export function buildCues(segments: Segment[], maxChars = 84, maxDuration = 7): 
     let words: Word[] = [];
     const flush = () => {
       if (!words.length) return;
-      cues.push({ speaker: segment.speaker, start: words[0].start, end: words[words.length - 1].end, text: joinWords(words) });
+      cues.push({
+        speaker: segment.speaker,
+        start: words[0].start,
+        end: words[words.length - 1].end,
+        text: joinWords(words),
+      });
       words = [];
     };
     for (const word of segment.words) {
@@ -53,35 +58,47 @@ export function formatClock(seconds: number): string {
 }
 
 export function toSrt(cues: Cue[], speakerNames: SpeakerNames = {}): string {
-  return cues.map((cue, index) => {
-    const time = `${formatTimestamp(cue.start, ",")} --> ${formatTimestamp(cue.end, ",")}`;
-    const prefix = cue.speaker === null ? "" : `[${speakerLabel(cue.speaker, speakerNames)}] `;
-    return `${index + 1}\n${time}\n${prefix}${cue.text}\n`;
-  }).join("\n");
+  return cues
+    .map((cue, index) => {
+      const time = `${formatTimestamp(cue.start, ",")} --> ${formatTimestamp(cue.end, ",")}`;
+      const prefix = cue.speaker === null ? "" : `[${speakerLabel(cue.speaker, speakerNames)}] `;
+      return `${index + 1}\n${time}\n${prefix}${cue.text}\n`;
+    })
+    .join("\n");
 }
 
 export function toVtt(cues: Cue[], speakerNames: SpeakerNames = {}): string {
-  const body = cues.map((cue) => {
-    const voice = cue.speaker === null
-      ? null
-      : speakerLabel(cue.speaker, speakerNames)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-    const line = voice === null ? cue.text : `<v ${voice}>${cue.text}`;
-    return `${formatTimestamp(cue.start)} --> ${formatTimestamp(cue.end)}\n${line}\n`;
-  }).join("\n");
+  const body = cues
+    .map((cue) => {
+      const voice =
+        cue.speaker === null
+          ? null
+          : speakerLabel(cue.speaker, speakerNames)
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+      const line = voice === null ? cue.text : `<v ${voice}>${cue.text}`;
+      return `${formatTimestamp(cue.start)} --> ${formatTimestamp(cue.end)}\n${line}\n`;
+    })
+    .join("\n");
   return `WEBVTT\n\n${body}`;
 }
 
 export function toTxt(segments: Segment[], speakerNames: SpeakerNames = {}): string {
-  return segments.map((segment) => {
-    const prefix = segment.speaker === null ? "" : `${speakerLabel(segment.speaker, speakerNames)}: `;
-    return `[${formatClock(segment.start)}] ${prefix}${segment.text}`;
-  }).join("\n\n");
+  return segments
+    .map((segment) => {
+      const prefix =
+        segment.speaker === null ? "" : `${speakerLabel(segment.speaker, speakerNames)}: `;
+      return `[${formatClock(segment.start)}] ${prefix}${segment.text}`;
+    })
+    .join("\n\n");
 }
 
 export function slugify(title: string): string {
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
   return slug || "transcript";
 }

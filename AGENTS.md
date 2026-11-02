@@ -7,14 +7,23 @@ Run from the repo root:
 | What | Command |
 |---|---|
 | Frontend typecheck and build | `npm run build` |
+| Frontend lint | `npm run lint` |
+| Check frontend formatting (non-writing) | `npm run format:check` |
+| Format frontend source (writes files) | `npm run format` |
 | Frontend unit tests | `npm test` |
+| Rust formatting check | `cd src-tauri && cargo fmt --all -- --check` |
+| Rust lint | `cd src-tauri && cargo clippy --all-targets --locked -- -D warnings` |
 | Rust tests | `cd src-tauri && cargo test` |
-| Rust compile check | `cd src-tauri && cargo check --all-targets` |
 
 `npm run build` runs `tsc` before `vite build`, so it is the typecheck. `tsconfig.json`
-is strict and enables `noUnusedLocals` and `noUnusedParameters`. There is no lint or
-format script: the repo has no ESLint, Prettier, rustfmt, or clippy config. Tests need
-no models, network, sidecar install, or app launch.
+is strict and enables `noUnusedLocals` and `noUnusedParameters`. Biome handles frontend
+linting and formatting for `src/`, `scripts/`, the Vite config, app HTML, and the Node
+sidecar. Its explicit file allowlist excludes build output and dependencies. `format:check`
+is the non-writing check; `format` writes. CI runs these frontend checks and Rust fmt,
+clippy, and tests on pull requests and pushes to `main`. VS Code uses Biome for supported
+frontend files and rust-analyzer/rustfmt for Rust; install the recommended workspace
+extensions. Tests need no models, network, sidecar install, or app launch. CI does not
+exercise the native app or a full transcription run.
 
 ## Map and ownership
 

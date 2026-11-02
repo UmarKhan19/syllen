@@ -24,8 +24,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm run build
+      - run: npm test
 
   rust:
     name: Rust tests and check
@@ -34,6 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
       - run: |
           sudo apt-get update
           sudo apt-get install --yes \
@@ -46,7 +50,9 @@ jobs:
             libssl-dev \
             librsvg2-dev \
             libayatana-appindicator3-dev
-      - run: cargo test --locked
+      - run: cargo fmt --all -- --check
         working-directory: src-tauri
-      - run: cargo check --all-targets --locked
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test --locked
         working-directory: src-tauri

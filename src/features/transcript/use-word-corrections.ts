@@ -45,7 +45,10 @@ export function useWordCorrections({
 
   const beginWordEdit = useCallback(() => {
     setDraftSegments(
-      segments.map((segment) => ({ ...segment, words: segment.words.map((word) => ({ ...word })) })),
+      segments.map((segment) => ({
+        ...segment,
+        words: segment.words.map((word) => ({ ...word })),
+      })),
     );
     setEditingWord(null);
     setWordError(null);
@@ -59,12 +62,25 @@ export function useWordCorrections({
       if (!draftSegments) return null;
       if (!editingWord) return draftSegments;
       try {
-        const corrected = replaceWordText(draftSegments, editingWord.segment, editingWord.word, wordDraft);
+        const corrected = replaceWordText(
+          draftSegments,
+          editingWord.segment,
+          editingWord.word,
+          wordDraft,
+        );
         setDraftSegments(corrected);
         setEditingWord(null);
         setWordError(null);
-        onEditStateChange(true, savingWords, !sameWordTexts(originalWords, corrected.flatMap((segment) => segment.words)));
-        if (restoreFocus) requestAnimationFrame(() => wordAnchorRef.current?.focus({ preventScroll: true }));
+        onEditStateChange(
+          true,
+          savingWords,
+          !sameWordTexts(
+            originalWords,
+            corrected.flatMap((segment) => segment.words),
+          ),
+        );
+        if (restoreFocus)
+          requestAnimationFrame(() => wordAnchorRef.current?.focus({ preventScroll: true }));
         return corrected;
       } catch (problem) {
         setWordError(String(problem).replace(/^Error: /, ""));
@@ -108,18 +124,32 @@ export function useWordCorrections({
     wordAnchorRef.current = null;
     setWordError(null);
     if (draftSegments) {
-      onEditStateChange(true, savingWords, !sameWordTexts(originalWords, draftSegments.flatMap((segment) => segment.words)));
+      onEditStateChange(
+        true,
+        savingWords,
+        !sameWordTexts(
+          originalWords,
+          draftSegments.flatMap((segment) => segment.words),
+        ),
+      );
     }
     if (target) requestAnimationFrame(() => target.focus({ preventScroll: true }));
   }, [draftSegments, onEditStateChange, originalWords, savingWords]);
 
-  const updateWordDraft = useCallback((text: string) => {
-    setWordDraft(text);
-    const target = editingWord
-      ? renderedSegments[editingWord.segment]?.words[editingWord.word]?.text
-      : undefined;
-    onEditStateChange(true, savingWords, !sameWordTexts(originalWords, draftWords) || text !== target);
-  }, [draftWords, editingWord, onEditStateChange, originalWords, renderedSegments, savingWords]);
+  const updateWordDraft = useCallback(
+    (text: string) => {
+      setWordDraft(text);
+      const target = editingWord
+        ? renderedSegments[editingWord.segment]?.words[editingWord.word]?.text
+        : undefined;
+      onEditStateChange(
+        true,
+        savingWords,
+        !sameWordTexts(originalWords, draftWords) || text !== target,
+      );
+    },
+    [draftWords, editingWord, onEditStateChange, originalWords, renderedSegments, savingWords],
+  );
 
   async function saveWordEdits() {
     if (!draftSegments || savingWords) return;
@@ -149,9 +179,22 @@ export function useWordCorrections({
   }
 
   return {
-    editingWords, renderedSegments, editingWord, wordDraft, wordError, savingWords,
-    wordInputRef, wordAnchorRef, wordFocusToken, hasWordChanges,
-    beginWordEdit, applyWord, beginWord, cancelWordEdits, cancelWordInput,
-    updateWordDraft, saveWordEdits,
+    editingWords,
+    renderedSegments,
+    editingWord,
+    wordDraft,
+    wordError,
+    savingWords,
+    wordInputRef,
+    wordAnchorRef,
+    wordFocusToken,
+    hasWordChanges,
+    beginWordEdit,
+    applyWord,
+    beginWord,
+    cancelWordEdits,
+    cancelWordInput,
+    updateWordDraft,
+    saveWordEdits,
   };
 }

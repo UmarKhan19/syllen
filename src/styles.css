@@ -74,8 +74,7 @@
   --color-disabled-ink: var(--disabled-ink);
 
   /* Faces */
-  --font-ui: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", sans-serif;
+  --font-ui: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-text: "Source Serif 4", Georgia, "Times New Roman", serif;
   --font-mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -105,14 +104,12 @@
   --radius-card: 12px;
   --radius-control: 9px;
   --radius-inline: 7px; /* 30-32px square inline buttons only */
-  --shadow-float: 0 20px 44px -14px rgba(20, 22, 26, 0.26),
-    0 2px 8px rgba(20, 22, 26, 0.05);
+  --shadow-float: 0 20px 44px -14px rgba(20, 22, 26, 0.26), 0 2px 8px rgba(20, 22, 26, 0.05);
   --shadow-focus: 0 0 0 3px rgba(20, 22, 26, 0.12);
   --shadow-button-hover: 0 8px 20px -10px rgba(20, 22, 26, 0.6);
   /* The word-correction popover floats above the transcript's ink, so it
      carries a wider, softer lift than a button. */
-  --shadow-word-correction: 0 8px 24px rgb(20 22 26 / 12%),
-    0 2px 5px rgb(20 22 26 / 8%);
+  --shadow-word-correction: 0 8px 24px rgb(20 22 26 / 12%), 0 2px 5px rgb(20 22 26 / 8%);
   --container-page: 1280px;
 
   /* The design is authored in px, so one spacing step is 4px, not 0.25rem.

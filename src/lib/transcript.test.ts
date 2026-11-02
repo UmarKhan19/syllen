@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { toSrt, toTxt, toVtt, buildCues } from "./captions";
 import {
-  isPunctuation, joinWords, mergeWords, replaceWordText, sameWordTexts,
-  segmentIndexAt, speakerAt, wordIndexAt, type Turn, type Word,
+  isPunctuation,
+  joinWords,
+  mergeWords,
+  replaceWordText,
+  sameWordTexts,
+  segmentIndexAt,
+  speakerAt,
+  wordIndexAt,
+  type Turn,
+  type Word,
 } from "./transcript";
 
 const words: Word[] = [
@@ -47,7 +55,11 @@ describe("mergeWords", () => {
     let clock = 0;
     for (let sentence = 0; sentence < 12; sentence += 1) {
       for (let index = 0; index < 5; index += 1) {
-        spoken.push({ text: index === 4 ? `end${sentence}.` : `word${sentence}${index}`, start: clock, end: clock + 0.4 });
+        spoken.push({
+          text: index === 4 ? `end${sentence}.` : `word${sentence}${index}`,
+          start: clock,
+          end: clock + 0.4,
+        });
         clock += 0.5;
       }
     }
@@ -61,7 +73,11 @@ describe("mergeWords", () => {
     expect(joinWords(segments.flatMap((segment) => segment.words))).toBe(joinWords(spoken));
   });
   it("caps punctuation-free speech instead of one giant block", () => {
-    const run = Array.from({ length: 400 }, (_, index) => ({ text: `word${index}`, start: index * 0.5, end: index * 0.5 + 0.4 }));
+    const run = Array.from({ length: 400 }, (_, index) => ({
+      text: `word${index}`,
+      start: index * 0.5,
+      end: index * 0.5 + 0.4,
+    }));
     expect(mergeWords(run, []).length).toBeGreaterThan(1);
   });
 });
@@ -88,7 +104,9 @@ describe("word corrections", () => {
   });
   it("detects unchanged corrections by text and original timing", () => {
     expect(sameWordTexts(words, [...words])).toBe(true);
-    const corrected = replaceWordText(mergeWords(words, []), 0, 0, "Hi").flatMap((segment) => segment.words);
+    const corrected = replaceWordText(mergeWords(words, []), 0, 0, "Hi").flatMap(
+      (segment) => segment.words,
+    );
     expect(sameWordTexts(words, corrected)).toBe(false);
   });
 });

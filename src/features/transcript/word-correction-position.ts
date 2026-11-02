@@ -46,14 +46,11 @@ export function positionWordCorrection(
   const belowSpace = Math.max(0, maxBottom - belowTop);
   const aboveFits = aboveSpace >= popover.height;
   const belowFits = belowSpace >= popover.height;
-  const placement = aboveFits || (!belowFits && aboveSpace >= belowSpace)
-    ? "above"
-    : "below";
+  const placement = aboveFits || (!belowFits && aboveSpace >= belowSpace) ? "above" : "below";
 
   const maxHeight = placement === "above" ? aboveSpace : belowSpace;
-  const preferredTop = placement === "above"
-    ? (aboveFits ? aboveTop : anchor.top - gap - maxHeight)
-    : belowTop;
+  const preferredTop =
+    placement === "above" ? (aboveFits ? aboveTop : anchor.top - gap - maxHeight) : belowTop;
   const needsScroll = !aboveFits && !belowFits && (viewport.scrollAmount ?? 0) > 0;
   if (!aboveFits && !belowFits && maxHeight === 0 && !(allowScroll && needsScroll)) return null;
 

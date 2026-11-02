@@ -1,9 +1,6 @@
 use std::{
     process::Child,
-    sync::{
-        Arc, Mutex,
-        atomic::AtomicBool,
-    },
+    sync::{Arc, Mutex, atomic::AtomicBool},
 };
 
 #[derive(Clone, Default)]

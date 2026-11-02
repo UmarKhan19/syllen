@@ -3,10 +3,7 @@
  * Who can take Float32 samples directly, which skips Web Audio's 44.1 kHz
  * decode and its large intermediate buffer. Returns null for any other format.
  */
-export function wavPcm16ToFloat32(
-  buffer: ArrayBuffer,
-  sampleRate = 16_000,
-): Float32Array | null {
+export function wavPcm16ToFloat32(buffer: ArrayBuffer, sampleRate = 16_000): Float32Array | null {
   const view = new DataView(buffer);
   if (view.byteLength < 44) return null;
   if (view.getUint32(0, true) !== 0x46464952) return null; // "RIFF"

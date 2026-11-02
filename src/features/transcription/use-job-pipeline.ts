@@ -13,7 +13,9 @@ export function useJobPipeline(
 ) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
-  const [whoProgress, setWhoProgress] = useState<{ phase: string; fraction: number | null } | null>(null);
+  const [whoProgress, setWhoProgress] = useState<{ phase: string; fraction: number | null } | null>(
+    null,
+  );
   const [result, setResult] = useState<TranscriptResult | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [analysisReady, setAnalysisReady] = useState(true);
@@ -46,74 +48,87 @@ export function useJobPipeline(
       });
     };
     track(listen<ProgressEvent>("job:progress", (event) => publishProgress(event.payload)));
-    track(listen<JobError>("job:error", (event) => {
-      const message = event.payload.message;
-      if (message === "Cancelled") {
-        setPhase("idle");
-        setProgress(null);
-        return;
-      }
-      setError(message);
-      setPhase("error");
-    }));
-    track(listen<TranscriptResult>("job:result", async (event) => {
-      const transcript = event.payload;
-      setResult(transcript);
-      setSegments([]);
-      setAnalysisReady(false);
-      setSpeakerCount(null);
-      setWhoError(null);
-      setWhoProgress(null);
-      refreshLibrary();
-
-      const saveSegments = async (next: Segment[], count: number | null): Promise<boolean> => {
-        try {
-          await invoke("save_analysis", { id: transcript.jobId, segments: next, speakerCount: count });
-          refreshLibrary();
-          return true;
-        } catch {
-          setNotice("Speaker labels could not be saved to the library.");
-          return false;
+    track(
+      listen<JobError>("job:error", (event) => {
+        const message = event.payload.message;
+        if (message === "Cancelled") {
+          setPhase("idle");
+          setProgress(null);
+          return;
         }
-      };
-
-      if (!speakerLabelsRef.current) {
-        const plain = mergeWords(transcript.words, []);
-        setSegments(plain);
-        setAnalysisReady(await saveSegments(plain, null));
-        setPhase("done");
-        return;
-      }
-
-      setPhase("who");
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      try {
-        const { diarize, warm } = await import("./diarization-client");
-        warm();
-        const response = await fetch(convertFileSrc(transcript.audioPath));
-        if (!response.ok) throw new Error(`The audio file could not be read (${response.status}).`);
-        const audio = await response.arrayBuffer();
-        const diarization = await diarize(audio, (name, fraction) => setWhoProgress({ phase: name, fraction }));
-        const labelled = mergeWords(transcript.words, diarization.turns);
-        setSegments(labelled);
-        setSpeakerCount(diarization.speakerCount);
-        setAnalysisReady(await saveSegments(labelled, diarization.speakerCount));
-      } catch (problem) {
-        const plain = mergeWords(transcript.words, []);
-        setSegments(plain);
-        setWhoError(problem instanceof Error ? problem.message : String(problem));
-        setAnalysisReady(await saveSegments(plain, null));
-      } finally {
-        setPhase("done");
+        setError(message);
+        setPhase("error");
+      }),
+    );
+    track(
+      listen<TranscriptResult>("job:result", async (event) => {
+        const transcript = event.payload;
+        setResult(transcript);
+        setSegments([]);
+        setAnalysisReady(false);
+        setSpeakerCount(null);
+        setWhoError(null);
         setWhoProgress(null);
-      }
-    }));
+        refreshLibrary();
+
+        const saveSegments = async (next: Segment[], count: number | null): Promise<boolean> => {
+          try {
+            await invoke("save_analysis", {
+              id: transcript.jobId,
+              segments: next,
+              speakerCount: count,
+            });
+            refreshLibrary();
+            return true;
+          } catch {
+            setNotice("Speaker labels could not be saved to the library.");
+            return false;
+          }
+        };
+
+        if (!speakerLabelsRef.current) {
+          const plain = mergeWords(transcript.words, []);
+          setSegments(plain);
+          setAnalysisReady(await saveSegments(plain, null));
+          setPhase("done");
+          return;
+        }
+
+        setPhase("who");
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+        try {
+          const { diarize, warm } = await import("./diarization-client");
+          warm();
+          const response = await fetch(convertFileSrc(transcript.audioPath));
+          if (!response.ok)
+            throw new Error(`The audio file could not be read (${response.status}).`);
+          const audio = await response.arrayBuffer();
+          const diarization = await diarize(audio, (name, fraction) =>
+            setWhoProgress({ phase: name, fraction }),
+          );
+          const labelled = mergeWords(transcript.words, diarization.turns);
+          setSegments(labelled);
+          setSpeakerCount(diarization.speakerCount);
+          setAnalysisReady(await saveSegments(labelled, diarization.speakerCount));
+        } catch (problem) {
+          const plain = mergeWords(transcript.words, []);
+          setSegments(plain);
+          setWhoError(problem instanceof Error ? problem.message : String(problem));
+          setAnalysisReady(await saveSegments(plain, null));
+        } finally {
+          setPhase("done");
+          setWhoProgress(null);
+        }
+      }),
+    );
     return () => {
       disposed = true;
       cancelAnimationFrame(progressFrame);
-      unlisten.forEach((fn) => fn());
+      for (const fn of unlisten) fn();
     };
-  }, []);
+  }, [refreshLibrary, setNotice, speakerLabelsRef]);
 
   async function start(source: { path: string } | { url: string }) {
     setError(null);
@@ -171,5 +186,28 @@ export function useJobPipeline(
     setPhase("done");
   }
 
-  return { phase, setPhase, progress, result, setResult, segments, setSegments, analysisReady, setAnalysisReady, speakerCount, setSpeakerCount, whoProgress, setWhoProgress, whoError, setWhoError, error, setError, start, cancel, clearSession, clearDeletedSession, showSaved };
+  return {
+    phase,
+    setPhase,
+    progress,
+    result,
+    setResult,
+    segments,
+    setSegments,
+    analysisReady,
+    setAnalysisReady,
+    speakerCount,
+    setSpeakerCount,
+    whoProgress,
+    setWhoProgress,
+    whoError,
+    setWhoError,
+    error,
+    setError,
+    start,
+    cancel,
+    clearSession,
+    clearDeletedSession,
+    showSaved,
+  };
 }

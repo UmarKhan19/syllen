@@ -44,9 +44,7 @@ function send(created: Worker, request: { id: number; audio: ArrayBuffer }) {
     created.postMessage(request, [request.audio]);
   } catch (error) {
     pending.delete(request.id);
-    pendingRequest.reject(
-      error instanceof Error ? error : new Error(String(error)),
-    );
+    pendingRequest.reject(error instanceof Error ? error : new Error(String(error)));
   }
 }
 
