@@ -91,11 +91,8 @@ export function TranscriptWorkspace({
       )}
       <div className="sticky top-bar z-[15] mt-1 bg-paper" data-reading-dock>
         <div className="grid min-h-9.5 grid-cols-[minmax(0,1fr)] items-center border-b border-rule">
-          <div
-            className="inline-flex flex-none justify-self-end rounded-control border border-rule bg-sheet"
-            role="toolbar"
-            aria-label="Transcript actions"
-          >
+          <fieldset className="inline-flex min-w-0 flex-none justify-self-end m-0 rounded-control border border-rule bg-sheet p-0">
+            <legend className="sr-only">Transcript actions</legend>
             {!wordEditing && (
               <>
                 <button type="button" className={`${TOOLBAR} rounded-l-[8px]`} onClick={onCopy}>
@@ -130,7 +127,7 @@ export function TranscriptWorkspace({
                 className={`flex min-h-9 flex-none items-center gap-2 ${wordEditing ? "" : "border-l border-rule pl-2 [&>button]:rounded-r-[8px]"}`}
               />
             )}
-          </div>
+          </fieldset>
           <div ref={setErrorHost} className="min-w-0 pt-1 pb-2 empty:hidden" />
         </div>
         {result.audioUrl && (
