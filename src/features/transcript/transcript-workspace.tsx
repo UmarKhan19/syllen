@@ -93,7 +93,7 @@ export function TranscriptWorkspace({
         <div className="grid min-h-9.5 grid-cols-[minmax(0,1fr)] items-center border-b border-rule">
           <div
             className="inline-flex flex-none justify-self-end rounded-control border border-rule bg-sheet"
-            role="group"
+            role="toolbar"
             aria-label="Transcript actions"
           >
             {!wordEditing && (

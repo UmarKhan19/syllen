@@ -126,9 +126,9 @@ export function useJobPipeline(
     return () => {
       disposed = true;
       cancelAnimationFrame(progressFrame);
-      unlisten.forEach((fn) => fn());
+      for (const fn of unlisten) fn();
     };
-  }, []);
+  }, [refreshLibrary, setNotice, speakerLabelsRef]);
 
   async function start(source: { path: string } | { url: string }) {
     setError(null);

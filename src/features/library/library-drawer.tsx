@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LibraryItem } from "../../lib/wire-types";
 import { formatBytes } from "../../lib/format-bytes";
 import { formatClock } from "../../lib/captions";
@@ -40,6 +40,7 @@ export function LibraryDrawer({
   closeRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [query, setQuery] = useState("");
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     setQuery("");
@@ -50,6 +51,9 @@ export function LibraryDrawer({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [open, onClose, closeRef]);
+  useEffect(() => {
+    if (deletingId) cancelDeleteRef.current?.focus();
+  }, [deletingId]);
   const filtered = useMemo(
     () =>
       items?.filter((item) => item.title.toLowerCase().includes(query.trim().toLowerCase())) ?? [],
@@ -58,14 +62,15 @@ export function LibraryDrawer({
   const bytes = items?.reduce((sum, item) => sum + item.audioBytes, 0) ?? 0;
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-[100] flex animate-fade-in justify-end bg-scrim motion-reduce:animate-none"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-[100] flex animate-fade-in justify-end bg-scrim motion-reduce:animate-none">
+      <button
+        type="button"
+        className="absolute inset-0 z-0 h-full w-full cursor-default border-0 bg-transparent p-0"
+        aria-label="Close library"
+        onClick={onClose}
+      />
       <aside
-        className="flex h-full w-full max-w-[480px] animate-slide-in flex-col overflow-y-auto border-l border-rule bg-paper px-6.5 pt-6 pb-7.5 shadow-float motion-reduce:animate-none"
+        className="relative z-10 flex h-full w-full max-w-[480px] animate-slide-in flex-col overflow-y-auto border-l border-rule bg-paper px-6.5 pt-6 pb-7.5 shadow-float motion-reduce:animate-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="library-title"
@@ -155,9 +160,9 @@ export function LibraryDrawer({
                       <button
                         type="button"
                         className={`${GHOST} h-8 px-3 text-meta`}
+                        ref={cancelDeleteRef}
                         onClick={onCancelDelete}
                         disabled={deleteBusy}
-                        autoFocus
                       >
                         Keep
                       </button>

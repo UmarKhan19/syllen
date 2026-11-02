@@ -79,7 +79,7 @@ export function usePlayback(result: TranscriptResult | null, segments: Segment[]
       audio.load();
       setPlaying(false);
     };
-  }, [audio, audioUrl]);
+  }, [audio, audioUrl, result?.duration]);
 
   useEffect(() => {
     const onPlay = () => setPlaying(true);

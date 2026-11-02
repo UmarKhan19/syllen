@@ -81,7 +81,7 @@ function packageDirectory(from, name) {
   throw new Error(`Could not resolve installed package ${name} from ${from}`);
 }
 
-async function collectNpm(root, project, label, addFile, getLicenseText) {
+async function collectNpm(project, label, addFile, getLicenseText) {
   const lock = JSON.parse(await readFile(join(project, "package-lock.json"), "utf8"));
   const rootPackage = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
   const packages = new Map();
@@ -187,7 +187,7 @@ function crateSourceUrl(pkg) {
   return `https://crates.io/api/v1/crates/${encodeURIComponent(pkg.name)}/${encodeURIComponent(pkg.version)}/download`;
 }
 
-async function collectCargo(root, metadata, target, addFile, getLicenseText) {
+async function collectCargo(metadata, target, addFile, getLicenseText) {
   const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
   const packagesById = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
   const visited = new Set();
@@ -345,18 +345,12 @@ export async function writeNotices(
   }
 
   const npmPackages = [];
-  npmPackages.push(...(await collectNpm(root, root, "frontend", addFile, getLicenseText)));
+  npmPackages.push(...(await collectNpm(root, "frontend", addFile, getLicenseText)));
   npmPackages.push(
-    ...(await collectNpm(
-      root,
-      join(root, "src-tauri", "sidecar"),
-      "sidecar",
-      addFile,
-      getLicenseText,
-    )),
+    ...(await collectNpm(join(root, "src-tauri", "sidecar"), "sidecar", addFile, getLicenseText)),
   );
   const cargo = metadata ? { metadata, target } : cargoMetadata(root);
-  const rust = await collectCargo(root, cargo.metadata, cargo.target, addFile, getLicenseText);
+  const rust = await collectCargo(cargo.metadata, cargo.target, addFile, getLicenseText);
 
   const manifest = {
     nodeVersion,

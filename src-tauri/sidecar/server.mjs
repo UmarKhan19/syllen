@@ -6,7 +6,7 @@ import * as ort from "onnxruntime-node";
 const audioPath = process.argv[2];
 
 function send(event) {
-  process.stdout.write(JSON.stringify(event) + "\n");
+  process.stdout.write(`${JSON.stringify(event)}\n`);
 }
 
 if (!audioPath) {

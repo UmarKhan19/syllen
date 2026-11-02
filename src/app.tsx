@@ -147,7 +147,7 @@ export default function App() {
         setPrompt(String(problem));
       }
     },
-    [wordEditing],
+    [job.setError, job.setPhase, wordEditing],
   );
 
   async function pickFile() {

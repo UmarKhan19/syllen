@@ -55,7 +55,7 @@ function paintWave(
       for (let sample = from; sample < to; sample += 1) {
         peak = Math.max(peak, peaks[sample] ?? 0);
       }
-      const height = Math.max(2, Math.round(Math.pow(peak / 255, 0.72) * (WAVE_HEIGHT - 4)));
+      const height = Math.max(2, Math.round((peak / 255) ** 0.72 * (WAVE_HEIGHT - 4)));
       const x = index * WAVE_PITCH;
       context.fillStyle = x + WAVE_BAR > progress ? colors.rest : colors.played;
       context.fillRect(x, (WAVE_HEIGHT - height) / 2, WAVE_BAR, height);

@@ -73,7 +73,11 @@ export function replaceWordText(
 ): Segment[] {
   const word = segments[segmentIndex]?.words[wordIndex];
   const corrected = text.trim();
-  if (!word || !corrected || corrected.length > 512 || /[\u0000-\u001f\u007f]/u.test(corrected)) {
+  const hasControlCharacter = Array.from(corrected).some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 0x1f || code === 0x7f;
+  });
+  if (!word || !corrected || corrected.length > 512 || hasControlCharacter) {
     throw new Error("Enter a non-empty correction of 512 characters or fewer.");
   }
   return segments.map((segment, index) => {

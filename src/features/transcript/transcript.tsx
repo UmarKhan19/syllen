@@ -207,30 +207,28 @@ export const Transcript = memo(function Transcript({
         actionHost &&
         createPortal(
           editingWords ? (
-            <>
-              <div className="flex flex-none gap-1.5">
-                <button
-                  ref={toolbarCancelRef}
-                  type="button"
-                  className="h-8 px-2.25 py-0 border border-rule rounded-control bg-transparent text-ink-2 text-fine whitespace-nowrap cursor-pointer [transition:background_.15s_ease,border-color_.15s_ease,color_.15s_ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:opacity-45 disabled:cursor-not-allowed"
-                  data-word-correction-action="cancel"
-                  onClick={cancelWordEdits}
-                  disabled={savingWords}
-                >
-                  Cancel
-                </button>
-                <button
-                  ref={toolbarSaveRef}
-                  type="button"
-                  className="h-8 px-2.25 py-0 border border-ink rounded-card bg-ink text-on-ink text-fine font-semibold tracking-[-0.002em] whitespace-nowrap cursor-pointer [transition:background_.15s_ease,box-shadow_.15s_ease,transform_.05s_ease] enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover enabled:active:[transform:translateY(1px)] disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink disabled:cursor-not-allowed disabled:opacity-45"
-                  data-word-correction-action="save"
-                  onClick={saveWordEdits}
-                  disabled={savingWords || !hasWordChanges}
-                >
-                  {savingWords ? "Saving…" : "Save changes"}
-                </button>
-              </div>
-            </>
+            <div className="flex flex-none gap-1.5">
+              <button
+                ref={toolbarCancelRef}
+                type="button"
+                className="h-8 px-2.25 py-0 border border-rule rounded-control bg-transparent text-ink-2 text-fine whitespace-nowrap cursor-pointer [transition:background_.15s_ease,border-color_.15s_ease,color_.15s_ease] enabled:hover:border-rule-strong enabled:hover:bg-sheet enabled:hover:text-ink disabled:opacity-45 disabled:cursor-not-allowed"
+                data-word-correction-action="cancel"
+                onClick={cancelWordEdits}
+                disabled={savingWords}
+              >
+                Cancel
+              </button>
+              <button
+                ref={toolbarSaveRef}
+                type="button"
+                className="h-8 px-2.25 py-0 border border-ink rounded-card bg-ink text-on-ink text-fine font-semibold tracking-[-0.002em] whitespace-nowrap cursor-pointer [transition:background_.15s_ease,box-shadow_.15s_ease,transform_.05s_ease] enabled:hover:bg-ink-deep enabled:hover:shadow-button-hover enabled:active:[transform:translateY(1px)] disabled:border-transparent disabled:bg-disabled disabled:text-disabled-ink disabled:cursor-not-allowed disabled:opacity-45"
+                data-word-correction-action="save"
+                onClick={saveWordEdits}
+                disabled={savingWords || !hasWordChanges}
+              >
+                {savingWords ? "Saving…" : "Save changes"}
+              </button>
+            </div>
           ) : (
             <>
               <button
@@ -302,7 +300,7 @@ export const Transcript = memo(function Transcript({
               <div
                 className={`${paraFrame} ${paraColumns}${startsTurn ? " mt-7.5 first:mt-3" : ""}`}
                 data-para-index={index}
-                key={`${segment.start}-${index}`}
+                key={`${segment.start}-${segment.end}`}
               >
                 <TimeCode
                   start={segment.start}
@@ -361,7 +359,7 @@ export const Transcript = memo(function Transcript({
 
           return (
             <Paragraph
-              key={`${segment.start}-${index}`}
+              key={`${segment.start}-${segment.end}`}
               segment={segment}
               index={index}
               startsTurn={startsTurn}
@@ -451,7 +449,7 @@ const Paragraph = memo(function Paragraph({
               const prefix = wordIndex > 0 && !isPunctuation(word.text) ? " " : null;
               if (editingWords) {
                 return (
-                  <Fragment key={`${word.start}-${wordIndex}`}>
+                  <Fragment key={`${word.start}-${word.end}`}>
                     {prefix}
                     <button
                       type="button"
@@ -475,15 +473,17 @@ const Paragraph = memo(function Paragraph({
                 );
               }
               return (
-                <span
-                  key={`${word.start}-${wordIndex}`}
+                <button
+                  type="button"
+                  disabled={!onSeek}
+                  key={`${word.start}-${word.end}`}
                   className={
                     current && activeWord === wordIndex
                       ? onSeek
-                        ? "rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
+                        ? "inline border-0 bg-transparent p-0 align-baseline rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)] cursor-pointer"
                         : "rounded-[2px] bg-word shadow-[0_0_0_2px_var(--word)]"
                       : onSeek
-                        ? "cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
+                        ? "inline border-0 bg-transparent p-0 align-baseline cursor-pointer hover:rounded-[2px] hover:bg-word-hover hover:shadow-[0_0_0_2px_var(--word-hover)]"
                         : undefined
                   }
                   onClick={
@@ -499,7 +499,7 @@ const Paragraph = memo(function Paragraph({
                 >
                   {prefix}
                   {word.text}
-                </span>
+                </button>
               );
             })}
           </span>

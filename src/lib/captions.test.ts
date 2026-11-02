@@ -34,7 +34,9 @@ describe("captions", () => {
     }));
     const cues = buildCues(mergeWords(long, [{ speaker: 0, start: 0, end: 30 }]));
     expect(cues.length).toBeGreaterThan(1);
-    cues.forEach((cue) => expect(cue.text.length).toBeLessThanOrEqual(90));
+    cues.forEach((cue) => {
+      expect(cue.text.length).toBeLessThanOrEqual(90);
+    });
     const srt = toSrt(cues);
     expect(srt).toContain("00:00:00,000 -->");
     expect(srt).toContain("[Speaker 1]");

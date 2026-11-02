@@ -59,14 +59,15 @@ function wav({
 describe("wavPcm16ToFloat32", () => {
   it("converts 16 kHz mono PCM16 samples", () => {
     const samples = wavPcm16ToFloat32(wav({ samples: [0, 16384, -32768] }));
-    expect(samples).not.toBeNull();
-    expect(Array.from(samples!)).toEqual([0, 0.5, -1]);
+    if (!samples) throw new Error("Expected valid WAV samples");
+    expect(Array.from(samples)).toEqual([0, 0.5, -1]);
   });
 
   it("skips unrelated chunks with odd padding", () => {
     const samples = wavPcm16ToFloat32(wav({ samples: [100, -100], extraChunk: true }));
-    expect(samples?.length).toBe(2);
-    expect(samples![0]).toBeCloseTo(100 / 32768);
+    if (!samples) throw new Error("Expected valid WAV samples");
+    expect(samples.length).toBe(2);
+    expect(samples[0]).toBeCloseTo(100 / 32768);
   });
 
   it("rejects formats the pipeline never produces", () => {

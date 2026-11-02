@@ -55,14 +55,15 @@ export function SettingsDrawer({
   }, [open, onClose, closeRef]);
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-[100] flex animate-fade-in justify-end bg-scrim motion-reduce:animate-none"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-[100] flex animate-fade-in justify-end bg-scrim motion-reduce:animate-none">
+      <button
+        type="button"
+        className="absolute inset-0 z-0 h-full w-full cursor-default border-0 bg-transparent p-0"
+        aria-label="Close settings"
+        onClick={onClose}
+      />
       <aside
-        className="flex h-full w-full max-w-[420px] animate-slide-in flex-col overflow-y-auto border-l border-rule bg-paper px-6.5 pt-6 pb-7.5 shadow-float motion-reduce:animate-none"
+        className="relative z-10 flex h-full w-full max-w-[420px] animate-slide-in flex-col overflow-y-auto border-l border-rule bg-paper px-6.5 pt-6 pb-7.5 shadow-float motion-reduce:animate-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
