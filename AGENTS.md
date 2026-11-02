@@ -14,6 +14,7 @@ Run from the repo root:
 | Rust formatting check | `cd src-tauri && cargo fmt --all -- --check` |
 | Rust lint | `cd src-tauri && cargo clippy --all-targets --locked -- -D warnings` |
 | Rust tests | `cd src-tauri && cargo test` |
+| Optional pre-push suite | `npm run prepush` |
 
 `npm run build` runs `tsc` before `vite build`, so it is the typecheck. `tsconfig.json`
 is strict and enables `noUnusedLocals` and `noUnusedParameters`. Biome handles frontend
@@ -24,6 +25,13 @@ clippy, and tests on pull requests and pushes to `main`. VS Code uses Biome for 
 frontend files and rust-analyzer/rustfmt for Rust; install the recommended workspace
 extensions. Tests need no models, network, sidecar install, or app launch. CI does not
 exercise the native app or a full transcription run.
+
+Pre-commit reconstructs the index in a temporary directory, including staged Rust modules
+and rustfmt config, so checks use staged bytes even when the working tree differs. Gitleaks
+scans complete changed staged blobs in an isolated directory. Hooks do not format or stage
+files. Install Gitleaks separately; the hook fails closed if it is missing. Husky uses a
+relative hook path that may be shared by linked worktrees. Typecheck,
+frontend tests, clippy, and Rust tests remain opt-in with `SYLLEN_RUN_PREPUSH=1 git push`.
 
 ## Map and ownership
 

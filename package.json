@@ -7,6 +7,8 @@
   },
   "type": "module",
   "scripts": {
+    "prepare": "husky",
+    "typecheck": "tsc --noEmit",
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "biome lint --error-on-warnings .",
@@ -14,7 +16,8 @@
     "format:check": "biome format .",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/hooks.check.mjs",
+    "prepush": "npm run typecheck && npm test && cd src-tauri && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked",
     "sidecar:install": "npm --prefix src-tauri/sidecar install",
     "sidecar:prepare": "node scripts/prepare-sidecar.mjs",
     "tauri:build": "npm run sidecar:prepare && tauri build"
@@ -34,6 +37,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "husky": "^9.1.7",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "vite": "^8.0.16",

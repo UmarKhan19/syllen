@@ -24,16 +24,36 @@ npm run tauri dev
 
 `sidecar:install` downloads the Voz SDK and `onnxruntime-node` into `src-tauri/sidecar`. Details and requirements are in [README.md](README.md#run-from-source).
 
+`npm install` enables Husky hooks for this worktree. Pre-commit reconstructs the Git index in a temporary directory for Biome and Rust formatting checks, without formatting or staging anything. Gitleaks scans complete changed staged blobs in a separate temporary directory with its built-in default rules. It does not read live ignore files or Git attributes. Missing or failing Gitleaks blocks the commit. Hooks never download tools.
+
+Install Gitleaks 8.30.1 or newer from the [official releases](https://github.com/gitleaks/gitleaks/releases), verifying the matching checksum before extracting it. Linux x86-64 v8.30.1:
+
+```sh
+mkdir -p /tmp/gitleaks-8.30.1 "$HOME/.local/bin"
+curl -fL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks-8.30.1/gitleaks.tar.gz
+echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks-8.30.1/gitleaks.tar.gz' | sha256sum -c -
+tar -xzf /tmp/gitleaks-8.30.1/gitleaks.tar.gz -C /tmp/gitleaks-8.30.1 gitleaks
+install -m 0755 /tmp/gitleaks-8.30.1/gitleaks "$HOME/.local/bin/gitleaks"
+gitleaks version
+```
+
+For other systems, use the matching asset and checksum from the official release. This worktree was tested with v8.30.1.
+
+Husky sets the relative `core.hooksPath` to `.husky/_`. In this linked-worktree setup Git stores that setting in the shared `.git/config`, so other worktrees inherit it. The relative path resolves from each worktree root; run `npm install` there too so its `.husky/_` hook shims exist. Check `git config --show-origin --get core.hooksPath` when hooks behave differently. Heavy checks are opt-in: use `SYLLEN_RUN_PREPUSH=1 git push` or run `npm run prepush`. `HUSKY=0` bypasses Husky checks; CI still runs the full checks.
+
 ## Checks before a pull request
 
 ```bash
 npm run build                      # tsc typecheck, then vite build
-npm test                           # Vitest
-cd src-tauri && cargo test
-cd src-tauri && cargo check --all-targets
+npm run lint
+npm run format:check
+npm test                           # Vitest and staged-hook tests
+cd src-tauri && cargo fmt --all -- --check
+cd src-tauri && cargo clippy --all-targets --locked -- -D warnings
+cd src-tauri && cargo test --locked
 ```
 
-`npm run build` is the typecheck. There is no lint or format script, and no formatter config to follow.
+`npm run build` includes the TypeScript typecheck. CI also runs Biome lint and format checks, and `npm test` includes hook safety tests.
 
 The app writes to the real app data folder, so do not run it on your normal desktop while testing. Run it under Xvfb with isolated `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_CACHE_HOME`; [AGENTS.md](AGENTS.md#running--testing-the-app) has the commands and the known Xvfb quirks. Say in the pull request what you checked by hand. Component wiring, Tauri commands, and a full job run have no automated tests.
 
