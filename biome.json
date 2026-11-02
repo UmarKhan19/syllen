@@ -17,6 +17,12 @@
       "tailwindDirectives": true
     }
   },
+  "html": {
+    "experimentalFullSupportEnabled": true,
+    "formatter": {
+      "enabled": true
+    }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
