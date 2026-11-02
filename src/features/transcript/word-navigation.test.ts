@@ -14,6 +14,19 @@ describe("wordNavigationTarget", () => {
     expect(wordNavigationTarget("ArrowLeft", 0, 0, counts)).toBeNull();
     expect(wordNavigationTarget("ArrowRight", 1, 0, counts)).toBeNull();
   });
+
+  it("skips paragraphs without word controls in either direction", () => {
+    const countsWithHiddenAndEmptyParagraphs = [3, 0, 2, 0];
+    expect(wordNavigationTarget("ArrowDown", 0, 2, countsWithHiddenAndEmptyParagraphs)).toEqual({
+      segment: 2,
+      word: 1,
+    });
+    expect(wordNavigationTarget("ArrowUp", 2, 1, countsWithHiddenAndEmptyParagraphs)).toEqual({
+      segment: 0,
+      word: 1,
+    });
+    expect(wordNavigationTarget("ArrowDown", 2, 0, countsWithHiddenAndEmptyParagraphs)).toBeNull();
+  });
 });
 
 describe("wordTabStopIndex", () => {

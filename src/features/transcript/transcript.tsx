@@ -114,21 +114,24 @@ export const Transcript = memo(function Transcript({
     toolbarCancelRef,
   });
   const wordCounts = useMemo(
-    () => renderedSegments.map((item) => item.words.length),
-    [renderedSegments],
+    () =>
+      renderedSegments.map((item, index) =>
+        index === editingIndex && item.speaker !== null && !editingWords ? 0 : item.words.length,
+      ),
+    [editingIndex, editingWords, renderedSegments],
   );
   const handleWordKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>, segmentIndex: number, wordIndex: number) => {
       if (!onSeek && !editingWords) return;
       const target = wordNavigationTarget(event.key, segmentIndex, wordIndex, wordCounts);
       if (!target) return;
+      const button = containerRef.current?.querySelector<HTMLButtonElement>(
+        `[data-word-segment="${target.segment}"][data-word-index="${target.word}"]`,
+      );
+      if (!button) return;
       event.preventDefault();
       setFocusedWord(target);
-      containerRef.current
-        ?.querySelector<HTMLButtonElement>(
-          `[data-word-segment="${target.segment}"][data-word-index="${target.word}"]`,
-        )
-        ?.focus();
+      button.focus();
     },
     [editingWords, onSeek, wordCounts],
   );

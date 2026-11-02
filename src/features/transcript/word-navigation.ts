@@ -16,11 +16,25 @@ export function wordNavigationTarget(
   const count = wordCounts[segment] ?? 0;
   if (key === "ArrowLeft" && word > 0) return { segment, word: word - 1 };
   if (key === "ArrowRight" && word + 1 < count) return { segment, word: word + 1 };
-  if (key === "ArrowUp" && segment > 0 && wordCounts[segment - 1] > 0) {
-    return { segment: segment - 1, word: Math.min(word, wordCounts[segment - 1] - 1) };
+  if (key === "ArrowUp") {
+    for (let targetSegment = segment - 1; targetSegment >= 0; targetSegment--) {
+      if (wordCounts[targetSegment] > 0) {
+        return {
+          segment: targetSegment,
+          word: Math.min(word, wordCounts[targetSegment] - 1),
+        };
+      }
+    }
   }
-  if (key === "ArrowDown" && segment + 1 < wordCounts.length && wordCounts[segment + 1] > 0) {
-    return { segment: segment + 1, word: Math.min(word, wordCounts[segment + 1] - 1) };
+  if (key === "ArrowDown") {
+    for (let targetSegment = segment + 1; targetSegment < wordCounts.length; targetSegment++) {
+      if (wordCounts[targetSegment] > 0) {
+        return {
+          segment: targetSegment,
+          word: Math.min(word, wordCounts[targetSegment] - 1),
+        };
+      }
+    }
   }
   return null;
 }
