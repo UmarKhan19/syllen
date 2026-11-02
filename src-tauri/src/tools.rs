@@ -48,7 +48,7 @@ fn sidecar_dir(app: &AppHandle) -> PathBuf {
     #[cfg(debug_assertions)]
     {
         let _ = app;
-        return PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sidecar");
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sidecar")
     }
     #[cfg(not(debug_assertions))]
     {

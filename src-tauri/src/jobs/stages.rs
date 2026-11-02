@@ -108,10 +108,10 @@ pub(super) fn download(
     prepend_tool_path(&mut cmd, tools);
     cmd.arg("-o").arg(&template).arg(url);
     let (status, stderr) = run_streaming(&mut cmd, control, &mut |line| {
-        if let Some(rest) = line.strip_prefix("download:") {
-            if let Ok(percent) = rest.trim().trim_end_matches('%').trim().parse::<f64>() {
-                emit_progress(app, id, "download", Some(percent / 100.0));
-            }
+        if let Some(rest) = line.strip_prefix("download:")
+            && let Ok(percent) = rest.trim().trim_end_matches('%').trim().parse::<f64>()
+        {
+            emit_progress(app, id, "download", Some(percent / 100.0));
         }
     })?;
     if !status.success() {
