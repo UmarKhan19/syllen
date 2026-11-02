@@ -6,21 +6,21 @@ mod jobs;
 mod library;
 #[path = "library-commands.rs"]
 mod library_commands;
-#[path = "media-server.rs"]
-mod media_server;
 #[path = "media-file.rs"]
 mod media_file;
+#[path = "media-server.rs"]
+mod media_server;
 mod process;
 #[path = "text-export.rs"]
 mod text_export;
 mod tools;
 mod waveform;
 
-use std::sync::atomic::Ordering;
+use job_control::JobControl;
 use library::Library;
 use media_server::MediaServer;
+use std::sync::atomic::Ordering;
 use tauri::{Manager, RunEvent};
-use job_control::JobControl;
 
 pub(crate) struct AppState {
     control: JobControl,
@@ -40,7 +40,11 @@ pub fn run() {
             let library = Library::open(app.handle())
                 .map_err(|error| eprintln!("Transcript library unavailable: {error}"))
                 .ok();
-            app.manage(AppState { control: JobControl::default(), media, library });
+            app.manage(AppState {
+                control: JobControl::default(),
+                media,
+                library,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

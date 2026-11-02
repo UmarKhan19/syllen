@@ -12,10 +12,7 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    AppState,
-    contracts::JobStarted,
-    events::emit_error,
-    media_file::media_file,
+    AppState, contracts::JobStarted, events::emit_error, media_file::media_file,
     process::kill_current,
 };
 
@@ -34,7 +31,11 @@ fn now_millis() -> u128 {
 }
 
 fn check_cancel(control: &JobControl) -> Result<(), String> {
-    if control.cancel.load(Ordering::SeqCst) { Err("Cancelled".into()) } else { Ok(()) }
+    if control.cancel.load(Ordering::SeqCst) {
+        Err("Cancelled".into())
+    } else {
+        Ok(())
+    }
 }
 
 #[tauri::command]

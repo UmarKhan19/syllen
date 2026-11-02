@@ -12,16 +12,35 @@ const MEDIA_EXTENSIONS: &[&str] = &[
 pub(super) fn media_file(path: &Path) -> Result<FileInfo, String> {
     let metadata = std::fs::metadata(path)
         .map_err(|_| "That file could not be read. Choose it again.".to_string())?;
-    if !metadata.is_file() { return Err("Choose a video or audio file, not a folder.".into()); }
-    if metadata.len() == 0 { return Err("That file is empty.".into()); }
-    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
-    if !MEDIA_EXTENSIONS.contains(&extension.as_str()) { return Err("That file type is not supported. Choose a video or audio file.".into()); }
-    let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("Recording").to_string();
-    Ok(FileInfo { name, size: metadata.len() })
+    if !metadata.is_file() {
+        return Err("Choose a video or audio file, not a folder.".into());
+    }
+    if metadata.len() == 0 {
+        return Err("That file is empty.".into());
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !MEDIA_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("That file type is not supported. Choose a video or audio file.".into());
+    }
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Recording")
+        .to_string();
+    Ok(FileInfo {
+        name,
+        size: metadata.len(),
+    })
 }
 
 #[tauri::command]
-pub(super) fn file_info(path: String) -> Result<FileInfo, String> { media_file(Path::new(&path)) }
+pub(super) fn file_info(path: String) -> Result<FileInfo, String> {
+    media_file(Path::new(&path))
+}
 
 #[cfg(test)]
 mod tests {
@@ -30,8 +49,14 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_path(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("yt-transcript-{name}-{}-{}.tmp", std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()))
+        std::env::temp_dir().join(format!(
+            "yt-transcript-{name}-{}-{}.tmp",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
     }
 
     fn wav_bytes() -> Vec<u8> {

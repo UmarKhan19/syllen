@@ -171,24 +171,42 @@ fn write_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Write, net::TcpStream, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        io::Write,
+        net::TcpStream,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn wav_bytes(samples: &[i16]) -> Vec<u8> {
         let data_len = (samples.len() * 2) as u32;
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(b"RIFF"); bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
-        bytes.extend_from_slice(b"WAVEfmt "); bytes.extend_from_slice(&16u32.to_le_bytes());
-        bytes.extend_from_slice(&1u16.to_le_bytes()); bytes.extend_from_slice(&1u16.to_le_bytes());
-        bytes.extend_from_slice(&16_000u32.to_le_bytes()); bytes.extend_from_slice(&32_000u32.to_le_bytes());
-        bytes.extend_from_slice(&2u16.to_le_bytes()); bytes.extend_from_slice(&16u16.to_le_bytes());
-        bytes.extend_from_slice(b"data"); bytes.extend_from_slice(&data_len.to_le_bytes());
-        for sample in samples { bytes.extend_from_slice(&sample.to_le_bytes()); }
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&16_000u32.to_le_bytes());
+        bytes.extend_from_slice(&32_000u32.to_le_bytes());
+        bytes.extend_from_slice(&2u16.to_le_bytes());
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_len.to_le_bytes());
+        for sample in samples {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
         bytes
     }
 
     fn temp_path() -> PathBuf {
-        std::env::temp_dir().join(format!("yt-transcript-media-{}-{}.tmp", std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()))
+        std::env::temp_dir().join(format!(
+            "yt-transcript-media-{}-{}.tmp",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
     }
 
     #[test]
@@ -199,24 +217,44 @@ mod tests {
         let server = MediaServer::start().unwrap();
         server.serve(&path, "test-job");
         let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-        stream.write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=10-19\r\n\r\n").unwrap();
-        let mut response = Vec::new(); stream.read_to_end(&mut response).unwrap();
-        let split = response.windows(4).position(|window| window == b"\r\n\r\n").unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        stream
+            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=10-19\r\n\r\n")
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
+        let split = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap();
         let head = String::from_utf8_lossy(&response[..split]);
         assert!(head.starts_with("HTTP/1.1 206"));
         assert!(head.contains("Content-Range: bytes 10-19/"));
         assert_eq!(&response[split + 4..], &bytes[10..20]);
 
         let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-        stream.write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-\r\n\r\n").unwrap();
-        let mut response = Vec::new(); stream.read_to_end(&mut response).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        stream
+            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-\r\n\r\n")
+            .unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
         let _ = std::fs::remove_file(&path);
-        let split = response.windows(4).position(|window| window == b"\r\n\r\n").unwrap();
+        let split = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap();
         let head = String::from_utf8_lossy(&response[..split]);
         assert!(head.starts_with("HTTP/1.1 206"));
-        assert!(head.contains(&format!("Content-Range: bytes 0-{}/{}", bytes.len() - 1, bytes.len())));
+        assert!(head.contains(&format!(
+            "Content-Range: bytes 0-{}/{}",
+            bytes.len() - 1,
+            bytes.len()
+        )));
         assert_eq!(&response[split + 4..], bytes.as_slice());
     }
 }
