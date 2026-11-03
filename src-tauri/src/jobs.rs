@@ -23,6 +23,18 @@ enum Source {
     File(PathBuf),
 }
 
+fn validate_video_url(value: &str) -> Result<String, String> {
+    let url =
+        reqwest::Url::parse(value).map_err(|_| "Paste a valid HTTPS video URL.".to_string())?;
+    if url.scheme() != "https" || url.host_str().is_none() {
+        return Err("Only HTTPS video URLs are supported.".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("Video URLs must not contain a username or password.".into());
+    }
+    Ok(url.into())
+}
+
 fn now_millis() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -47,11 +59,7 @@ pub(super) fn start_job(
 ) -> Result<JobStarted, String> {
     let source = match (url, path) {
         (Some(url), None) => {
-            let url = url.trim().to_string();
-            let lower = url.to_ascii_lowercase();
-            if !(lower.starts_with("https://") || lower.starts_with("http://")) {
-                return Err("Paste a full video URL starting with http:// or https://".into());
-            }
+            let url = validate_video_url(url.trim())?;
             Source::Url(url)
         }
         (None, Some(path)) => {
@@ -106,6 +114,29 @@ pub(super) fn start_job(
     });
 
     Ok(JobStarted { job_id: id })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_video_url;
+
+    #[test]
+    fn accepts_only_well_formed_https_urls_without_credentials() {
+        assert_eq!(
+            validate_video_url("HTTPS://example.com/watch?v=1").unwrap(),
+            "https://example.com/watch?v=1"
+        );
+        for url in [
+            "http://example.com/video",
+            "file:///etc/passwd",
+            "https://",
+            "https://user@example.com/video",
+            "https://user:password@example.com/video",
+        ] {
+            assert!(validate_video_url(url).is_err(), "accepted {url}");
+        }
+        assert!(validate_video_url("https://example.com/--exec").is_ok());
+    }
 }
 
 #[tauri::command]
