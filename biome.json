@@ -9,6 +9,7 @@
       "package.json",
       "src-tauri/sidecar/package.json",
       "src-tauri/sidecar/server.mjs",
+      "src-tauri/sidecar/model-integrity.mjs",
       "biome.json"
     ]
   },

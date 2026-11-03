@@ -54,7 +54,7 @@ pub fn run() {
             media_file::file_info,
             jobs::start_job,
             jobs::cancel_job,
-            text_export::save_text,
+            text_export::export_text,
             library_commands::list_library,
             library_commands::load_transcript,
             library_commands::delete_transcript,

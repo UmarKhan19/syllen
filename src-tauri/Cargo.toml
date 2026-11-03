@@ -19,10 +19,25 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 http-range = "0.1"
+getrandom = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["default-tls", "charset"] }
+sha2 = "0.10"
+anyhow = "1"
+# Sequoia's OpenSSL backend avoids CNG's cx448/crypto-bigint path on Windows too.
+# Vendoring avoids a system OpenSSL runtime dependency on every desktop target.
+sequoia-openpgp = { version = "2.4.2", default-features = false, features = ["crypto-openssl"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+glob = "0.3"
+
+[patch.crates-io]
+glib = { path = "vendor/glib" }
+glib-macros = { path = "vendor/glib-macros" }
+gtk3-macros = { path = "vendor/gtk3-macros" }
 
 [profile.release]
 codegen-units = 1

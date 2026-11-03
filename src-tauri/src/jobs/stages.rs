@@ -49,6 +49,7 @@ pub(super) fn fetch_metadata(tools: &Tools, url: &str) -> Result<(String, Option
         "1",
         "--no-warnings",
         "-J",
+        "--",
         url,
     ]);
     let (stdout, stderr, status) = run_capture(&mut cmd)?;
@@ -106,7 +107,7 @@ pub(super) fn download(
     ]);
     cmd.args(YT_DLP_WAV_POSTPROCESSOR_ARGS);
     prepend_tool_path(&mut cmd, tools);
-    cmd.arg("-o").arg(&template).arg(url);
+    cmd.arg("-o").arg(&template).arg("--").arg(url);
     let (status, stderr) = run_streaming(&mut cmd, control, &mut |line| {
         if let Some(rest) = line.strip_prefix("download:")
             && let Ok(percent) = rest.trim().trim_end_matches('%').trim().parse::<f64>()
