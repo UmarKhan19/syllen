@@ -1,4 +1,5 @@
 import { Who } from "@desert-ant-labs/who";
+import { createWhoFetch, createWhoRuntimeFetch, WHO_MODEL_BASE_URL } from "./who-integrity";
 import type { WhoMessage, WhoRequest } from "./diarization-protocol";
 import { wavPcm16ToFloat32 } from "./wav";
 
@@ -13,16 +14,25 @@ function post(message: WhoMessage) {
   scope.postMessage(message);
 }
 
-const LITERT_DIR = "https://cdn.jsdelivr.net/npm/@litertjs/core/wasm/";
-
 function load(onProgress: (fraction: number) => void): Promise<Who> {
-  // LiteRT derives its wasm path from the worker's location, which is a blob:
-  // URL here. Point it at the CDN instead of the app origin.
-  (self as unknown as { Module?: { locateFile?: (path: string) => string } }).Module = {
-    locateFile: (path) => new URL(path, LITERT_DIR).href,
-  };
   loading ??= Promise.race([
-    Who.load({ onProgress }),
+    (async () => {
+      const originalFetch = self.fetch;
+      const guardedFetch = createWhoFetch(originalFetch.bind(self));
+      self.fetch = createWhoRuntimeFetch(
+        guardedFetch,
+        new URL(/* @vite-ignore */ "/litert/", import.meta.url),
+      );
+      try {
+        return await Who.load({
+          onProgress,
+          litertWasmDir: new URL(/* @vite-ignore */ "/litert/", import.meta.url).href,
+          modelBaseUrl: WHO_MODEL_BASE_URL,
+        });
+      } finally {
+        self.fetch = originalFetch;
+      }
+    })(),
     new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error("Speaker model load timed out after 10 minutes.")),

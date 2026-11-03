@@ -2,6 +2,7 @@
 // The API is documented at https://github.com/Desert-Ant-Labs/desert-ant-core.
 import { Voz } from "@desert-ant-labs/voz";
 import * as ort from "onnxruntime-node";
+import { createVozFetch, removeInvalidVozCache, VOZ_REVISION } from "./model-integrity.mjs";
 
 const audioPath = process.argv[2];
 
@@ -15,8 +16,11 @@ if (!audioPath) {
 }
 
 try {
+  await removeInvalidVozCache();
+  globalThis.fetch = createVozFetch(globalThis.fetch);
   const voz = await Voz.load({
     ort,
+    revision: VOZ_REVISION,
     onProgress: (fraction) => send({ type: "progress", phase: "model", fraction }),
   });
   const result = await voz.transcribe(audioPath, {

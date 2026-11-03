@@ -16,7 +16,7 @@
     "format:check": "biome format .",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run && node --test scripts/hooks.check.mjs",
+    "test": "vitest run && node --test scripts/hooks.check.mjs scripts/model-integrity.check.mjs",
     "prepush": "npm run typecheck && npm test && cd src-tauri && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked",
     "sidecar:install": "npm --prefix src-tauri/sidecar install",
     "sidecar:prepare": "node scripts/prepare-sidecar.mjs",

@@ -47,9 +47,10 @@ frontend tests, clippy, and Rust tests remain opt-in with `SYLLEN_RUN_PREPUSH=1 
 | `src/lib/transcript.ts`, `captions.ts` | Shared transcript model/merge and caption cue/export helpers |
 | `src/lib/wire-types.ts` | TypeScript mirror of the Rust wire types |
 | `src/lib/format-bytes.ts` | Shared byte-size formatting |
-| `src/lib/format-bytes.test.ts`, `src/lib/transcript.test.ts`, `src/lib/captions.test.ts` | Tests for shared helpers |
-| `src/features/transcription/wav.test.ts`, `src/features/library/date-label.test.ts`, `src/features/transcript/word-correction-position.test.ts` | Tests colocated with feature helpers |
+| `src/lib/format-bytes.test.ts`, `src/lib/transcript.test.ts`, `src/lib/captions.test.ts`, `src/lib/tauri-security-config.test.ts` | Tests for shared helpers and Tauri security configuration |
+| `src/features/transcription/wav.test.ts`, `src/features/library/date-label.test.ts`, `src/features/transcript/word-correction-position.test.ts`, `src/features/transcript/transcript-export.test.ts` | Tests colocated with feature helpers |
 | `src-tauri/src/lib.rs` | App state, Tauri command registration, setup and exit cleanup |
+| `src-tauri/tests/asset-protocol-scope.rs` | Asset protocol glob scope regression test |
 | `src-tauri/src/tools.rs`, `events.rs`, `text-export.rs` | Tool resolution/status/update, job event emission, and text export command |
 | `src-tauri/src/jobs.rs` and `src-tauri/src/jobs/*.rs` | Job start/cancel/cache lifecycle, pipeline orchestration, source stages, sidecar protocol, and audio persistence |
 | `src-tauri/src/job-control.rs`, `process.rs` | Job control state and subprocess management |
@@ -76,10 +77,11 @@ and state. `lib.rs` remains app setup and command registration.
 - Media extensions are hand-synced: `MEDIA_EXTENSIONS` in `src/app.tsx` (file picker)
   and in `src-tauri/src/media-file.rs` (backend check) must stay identical, 31 entries today.
 - Tauri commands are the IPC surface: `check_tools`, `latest_yt_dlp_version`,
-  `update_yt_dlp`, `file_info`, `start_job`, `cancel_job`, `save_text`,
+  `update_yt_dlp`, `file_info`, `start_job`, `cancel_job`, `export_text`,
   `list_library`, `load_transcript`, `delete_transcript`, `save_analysis`,
   `save_speaker_names`, `save_word_corrections`. Register a new one in
   `generate_handler!` in `lib.rs` and call it from the owning `src/features/` hook or view.
+  `export_text` receives a suggested filename, format and contents; Rust owns the save dialog and file write.
 - Events: `job:progress`, `job:error`, `job:result`. Their payloads are
   `ProgressEvent`, `ErrorEvent`, and `JobResult` in `contracts.rs`; `use-job-pipeline.ts`
   listens for them.
@@ -106,11 +108,12 @@ and state. `lib.rs` remains app setup and command registration.
 ## Tests
 
 - `npm test` runs Vitest's default `*.test.*` discovery, including helper tests in
-  `src/lib/` and `src/features/` plus `scripts/sidecar-notices.test.mjs`.
+  `src/lib/` and `src/features/` plus `scripts/sidecar-notices.test.mjs`. Export tests
+  assert the IPC payload carries no destination path; config tests pin CSP and asset scope.
 - `cargo test` runs Rust tests colocated with their modules: library persistence and
   deletion, waveform peaks and short reads, media byte ranges, media-file validation,
-  yt-dlp arguments, and audio persistence. They use `temp_path()` under the system
-  temp dir and clean up after themselves.
+  export filename validation, asset scope glob matches, yt-dlp arguments, and audio
+  persistence. They use `temp_path()` under the system temp dir and clean up after themselves.
 - Nothing covers React components, App wiring, Tauri commands end to end, the sidecar
   protocol, or a full job run. Check those by hand under Xvfb (below) and say what you
   checked in your report.

@@ -29,6 +29,9 @@ reqwest = { version = "0.13", default-features = false, features = ["default-tls
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[dev-dependencies]
+glob = "0.3"
+
 [patch.crates-io]
 glib = { path = "vendor/glib" }
 glib-macros = { path = "vendor/glib-macros" }
