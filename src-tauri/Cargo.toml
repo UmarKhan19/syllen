@@ -20,6 +20,10 @@ serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 http-range = "0.1"
 getrandom = "0.3"
+sha2 = "0.10"
+anyhow = "1"
+sequoia-openpgp = { version = "2.4.2", default-features = false, features = ["crypto-openssl"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 reqwest = { version = "0.13", default-features = false, features = ["default-tls", "charset"] }
 
 [target.'cfg(unix)'.dependencies]

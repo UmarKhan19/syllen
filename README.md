@@ -16,6 +16,7 @@ Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview AP
 
 - Node.js 22 LTS is the tested default. Supported versions are 22.12 or newer in the 22.x line, 24.x, and 26 or newer. Node.js 23 and 25 are unsupported. Rust 1.90 or newer is required by the pinned Tauri crates.
 - Tauri 2 prerequisites for your OS. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for package names.
+- Windows Rust builds also need the Visual Studio C++ Build Tools and Perl for the vendored OpenSSL build. NASM is optional; when installed, OpenSSL's build enables its assembly routines.
 - `ffmpeg` and `ffprobe` in `PATH`, or in `src-tauri/resources/bin/`.
 - `yt-dlp` for YouTube links. It can live in `PATH`, in `src-tauri/resources/bin/`, or in the app data folder after an update from Settings. Local file jobs do not need it.
 - On Linux, GStreamer base and good plugins for audio playback.

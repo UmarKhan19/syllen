@@ -5,6 +5,9 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
+#[path = "tools/update-verification.rs"]
+mod update_verification;
+
 pub(super) struct Tools {
     pub(super) node: PathBuf,
     pub(super) yt_dlp: PathBuf,
@@ -140,70 +143,7 @@ pub(super) async fn check_tools(app: AppHandle) -> ToolsStatus {
 #[tauri::command]
 pub(super) async fn update_yt_dlp(app: AppHandle) -> Result<UpdateResult, String> {
     let asset = yt_dlp_asset().ok_or("Automatic yt-dlp updates are not available on this platform. Install yt-dlp yourself and put it in PATH.")?;
-    let url = format!("https://github.com/yt-dlp/yt-dlp/releases/latest/download/{asset}");
-    let client = reqwest::Client::builder()
-        .user_agent("yt-transcript/0.1")
-        .build()
-        .map_err(|e| format!("Could not start the download: {e}"))?;
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach GitHub: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("GitHub returned an error: {e}"))?;
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Could not read the download: {e}"))?;
-    if bytes.len() < 1_000_000 {
-        return Err(format!(
-            "The download is too small to be yt-dlp ({} bytes).",
-            bytes.len()
-        ));
-    }
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("No app data directory: {e}"))?
-        .join("bin");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
-    let temp = dir.join(if cfg!(windows) {
-        "yt-dlp-new.exe"
-    } else {
-        "yt-dlp-new"
-    });
-    let target = dir.join(if cfg!(windows) {
-        "yt-dlp.exe"
-    } else {
-        "yt-dlp"
-    });
-    std::fs::write(&temp, &bytes).map_err(|e| format!("Could not write the download: {e}"))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Could not make the download executable: {e}"))?;
-    }
-    let version = Command::new(&temp)
-        .arg("--version")
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|v| !v.is_empty());
-    let Some(version) = version else {
-        let _ = std::fs::remove_file(&temp);
-        return Err("GitHub sent a file that is not a working yt-dlp binary.".into());
-    };
-    #[cfg(windows)]
-    if target.exists() {
-        std::fs::remove_file(&target)
-            .map_err(|e| format!("Could not replace the old yt-dlp: {e}"))?;
-    }
-    std::fs::rename(&temp, &target)
-        .map_err(|e| format!("Could not install the new yt-dlp: {e}"))?;
+    let version = update_verification::update(&app, asset).await?;
     Ok(UpdateResult {
         ok: true,
         message: format!(
@@ -215,35 +155,5 @@ pub(super) async fn update_yt_dlp(app: AppHandle) -> Result<UpdateResult, String
 
 #[tauri::command]
 pub(super) async fn latest_yt_dlp_version() -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("yt-transcript/0.1")
-        .build()
-        .map_err(|e| format!("Could not start the update check: {e}"))?;
-    let response = client
-        .get("https://github.com/yt-dlp/yt-dlp/releases/latest")
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach GitHub: {e}"))?;
-    let location = response
-        .headers()
-        .get(reqwest::header::LOCATION)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| {
-            format!(
-                "GitHub did not redirect to a release (HTTP {}).",
-                response.status()
-            )
-        })?;
-    let tag = location
-        .trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or_default()
-        .to_string();
-    if tag.is_empty() || !tag.chars().any(|c| c.is_ascii_digit()) {
-        return Err("GitHub returned an unexpected release tag.".into());
-    }
-    Ok(tag)
+    update_verification::release_tag().await
 }
