@@ -125,7 +125,8 @@ export function createVozFetch(fetchImpl) {
     const parsed = new URL(url, "https://invalid.local");
     const method = args[1]?.method ?? (args[0] instanceof Request ? args[0].method : "GET");
     if (isVozLicenseRequest(parsed, method)) {
-      const response = await fetchImpl(...args);
+      const init = { ...args[1], redirect: "error" };
+      const response = await fetchImpl(args[0], init);
       if (response.url !== parsed.href || !isVozLicenseRequest(new URL(response.url), method)) {
         throw new Error(`Unexpected Voz license redirect: ${response.url}`);
       }
@@ -134,10 +135,46 @@ export function createVozFetch(fetchImpl) {
     if (!isVozModelRequest(parsed)) throw new Error(`Unexpected Voz external request: ${url}`);
     if (method.toUpperCase() !== "GET") throw new Error(`Unexpected Voz model method: ${method}`);
     const name = vozModelName(url);
-    const response = await fetchImpl(...args);
-    if (!response.ok) throw new Error(`voz: model fetch -> HTTP ${response.status}`);
-    if (!allowedHubRedirect(response.url))
+    let current = parsed;
+    const headers = new Headers(
+      args[1]?.headers ?? (args[0] instanceof Request ? args[0].headers : undefined),
+    );
+    const visited = new Set([current.href]);
+    let response;
+    for (let hop = 0; hop <= 10; hop++) {
+      const request =
+        args[0] instanceof Request ? new Request(current.href, args[0]) : current.href;
+      response = await fetchImpl(request, { ...args[1], headers, redirect: "manual" });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      await response.body?.cancel();
+      const location = response.headers.get("location");
+      if (!location) throw new Error("Unexpected Voz model redirect: missing location");
+      let next;
+      try {
+        next = new URL(location, current);
+      } catch {
+        throw new Error("Unexpected Voz model redirect: invalid location");
+      }
+      if (
+        next.protocol !== "https:" ||
+        next.username ||
+        next.password ||
+        next.hash ||
+        !allowedHubRedirect(next.href) ||
+        visited.has(next.href) ||
+        hop === 10
+      )
+        throw new Error(`Unexpected Voz model redirect: ${next.href}`);
+      if (next.origin !== current.origin) {
+        for (const header of ["authorization", "cookie", "proxy-authorization"])
+          headers.delete(header);
+      }
+      visited.add(next.href);
+      current = next;
+    }
+    if (response.url && response.url !== current.href)
       throw new Error(`Unexpected Voz model redirect: ${response.url}`);
+    if (!response.ok) throw new Error(`voz: model fetch -> HTTP ${response.status}`);
     const bytes = await response.arrayBuffer();
     verifyVozFile(name, new Uint8Array(bytes));
     return new Response(bytes, {
