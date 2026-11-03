@@ -16,9 +16,10 @@ are the evidence for these fixes. No advisory is ignored or allowed.
 The vendored crates retain their normalized manifests, source, tests, licenses,
 and copyright notices. Their `Cargo.toml.orig` files are omitted so they cannot
 contradict the manifests Cargo actually builds. Package versions are not changed.
-Only trailing blank lines in the three vendored license files and trailing
-whitespace in a `glib-macros` documentation example were normalized; license
-wording and Rust code are unchanged.
+The vendored GLib tree also adds two `VariantStrIter` regression tests, and
+`gtk3-macros` adds a compile-fail documentation example. The three license files
+have only trailing blank lines normalized, and a `glib-macros` documentation
+example has trailing whitespace removed; license wording is unchanged.
 The original macro crates depended on `proc-macro-error`. A `proc-macro-error2`
 port was tried, then removed after RustSec added `RUSTSEC-2026-0173` for that
 unmaintained crate. The final port uses `syn::Error`, which both crates already

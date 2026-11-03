@@ -95,7 +95,7 @@ The library survives restarts. The job cache does not. Audio is kept as the same
 
 ## Inputs and exports
 
-URLs: any `http` or `https` URL that `yt-dlp` can read as a single video. YouTube is the tested path. The app does not expand playlists and rejects live streams.
+URLs: HTTPS URLs that `yt-dlp` can read as a single video. YouTube is the tested path. The app does not expand playlists and rejects live streams.
 
 Files: one local video or audio file with one of these extensions.
 
