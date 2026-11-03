@@ -24,6 +24,11 @@ reqwest = { version = "0.13", default-features = false, features = ["default-tls
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[patch.crates-io]
+glib = { path = "vendor/glib" }
+glib-macros = { path = "vendor/glib-macros" }
+gtk3-macros = { path = "vendor/gtk3-macros" }
+
 [profile.release]
 codegen-units = 1
 lto = true
