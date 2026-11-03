@@ -17,7 +17,7 @@ const MEDIA_ROUTE: &str = "/audio";
 /// audio path over loopback HTTP.
 pub(super) struct MediaServer {
     pub(super) port: u16,
-    current: Arc<Mutex<Option<PathBuf>>>,
+    current: Arc<Mutex<Option<(PathBuf, String)>>>,
 }
 
 impl MediaServer {
@@ -37,15 +37,24 @@ impl MediaServer {
         Ok(Self { port, current })
     }
 
-    pub(super) fn serve(&self, path: &Path, job: &str) -> String {
+    pub(super) fn serve(&self, path: &Path, _job: &str) -> String {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).expect("OS random source unavailable");
+        let token = bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
         if let Ok(mut current) = self.current.lock() {
-            *current = Some(path.to_path_buf());
+            *current = Some((path.to_path_buf(), token.clone()));
         }
-        format!("http://127.0.0.1:{}{MEDIA_ROUTE}?{job}", self.port)
+        format!("http://127.0.0.1:{}{MEDIA_ROUTE}?token={token}", self.port)
     }
 }
 
-fn serve_media(mut stream: TcpStream, files: &Mutex<Option<PathBuf>>) -> std::io::Result<()> {
+fn serve_media(
+    mut stream: TcpStream,
+    files: &Mutex<Option<(PathBuf, String)>>,
+) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
 
     let mut head = Vec::with_capacity(1024);
@@ -76,10 +85,24 @@ fn serve_media(mut stream: TcpStream, files: &Mutex<Option<PathBuf>>) -> std::io
         return write_error(&mut stream, 405, "Method not allowed", None);
     }
 
-    let path = files.lock().ok().and_then(|current| current.clone());
-    let Some(path) = path else {
+    let (host, origin) = match security_headers(head.lines().skip(1)) {
+        Ok(headers) => headers,
+        Err(()) => return write_error(&mut stream, 400, "Bad request", None),
+    };
+    let expected_host = format!("127.0.0.1:{}", stream.local_addr()?.port());
+    if host != expected_host
+        || origin.is_some_and(|value| value != format!("http://{expected_host}"))
+    {
+        return write_error(&mut stream, 403, "Forbidden", None);
+    }
+    let supplied = target.strip_prefix("/audio?token=");
+    let current = files.lock().ok().and_then(|current| current.clone());
+    let Some((path, token)) = current else {
         return write_error(&mut stream, 404, "No audio for this job", None);
     };
+    if supplied != Some(token.as_str()) {
+        return write_error(&mut stream, 403, "Forbidden", None);
+    }
     let mut file = match File::open(&path) {
         Ok(file) => file,
         Err(error) => {
@@ -145,6 +168,27 @@ fn serve_media(mut stream: TcpStream, files: &Mutex<Option<PathBuf>>) -> std::io
     let mut writer = BufWriter::new(stream);
     std::io::copy(&mut file.take(end + 1 - start), &mut writer)?;
     writer.flush()
+}
+
+fn security_headers<'a>(
+    lines: impl Iterator<Item = &'a str>,
+) -> Result<(String, Option<String>), ()> {
+    let (mut host, mut origin) = (None, None);
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("host") {
+            if host.replace(value.trim().to_string()).is_some() {
+                return Err(());
+            }
+        } else if name.eq_ignore_ascii_case("origin")
+            && origin.replace(value.trim().to_string()).is_some()
+        {
+            return Err(());
+        }
+    }
+    host.map(|host| (host, origin)).ok_or(())
 }
 
 fn write_error(
@@ -215,13 +259,24 @@ mod tests {
         let path = temp_path();
         std::fs::write(&path, &bytes).unwrap();
         let server = MediaServer::start().unwrap();
-        server.serve(&path, "test-job");
+        let url = server.serve(&path, "test-job");
+        let target = url
+            .split("127.0.0.1:")
+            .nth(1)
+            .unwrap()
+            .split_once('/')
+            .unwrap()
+            .1;
+        let host = format!("127.0.0.1:{}", server.port);
         let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
         stream
-            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=10-19\r\n\r\n")
+            .write_all(
+                format!("GET /{target} HTTP/1.1\r\nHost: {host}\r\nOrigin: http://{host}\r\nRange: bytes=10-19\r\n\r\n")
+                    .as_bytes(),
+            )
             .unwrap();
         let mut response = Vec::new();
         stream.read_to_end(&mut response).unwrap();
@@ -239,7 +294,10 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
         stream
-            .write_all(b"GET /audio HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-\r\n\r\n")
+            .write_all(
+                format!("GET /{target} HTTP/1.1\r\nHost: {host}\r\nRange: bytes=0-\r\n\r\n")
+                    .as_bytes(),
+            )
             .unwrap();
         let mut response = Vec::new();
         stream.read_to_end(&mut response).unwrap();
@@ -256,5 +314,77 @@ mod tests {
             bytes.len()
         )));
         assert_eq!(&response[split + 4..], bytes.as_slice());
+    }
+
+    #[test]
+    fn media_requires_token_and_same_origin_host_and_invalidates_old_tokens() {
+        let path = temp_path();
+        std::fs::write(&path, wav_bytes(&[1, 2])).unwrap();
+        let server = MediaServer::start().unwrap();
+        let old_url = server.serve(&path, "old");
+        let old_target = old_url
+            .split("127.0.0.1:")
+            .nth(1)
+            .unwrap()
+            .split_once('/')
+            .unwrap()
+            .1;
+        let new_url = server.serve(&path, "new");
+        let new_target = new_url
+            .split("127.0.0.1:")
+            .nth(1)
+            .unwrap()
+            .split_once('/')
+            .unwrap()
+            .1;
+        for (target, host, origin, expected) in [
+            ("/audio", format!("127.0.0.1:{}", server.port), None, "403"),
+            (new_target, "attacker.example".into(), None, "403"),
+            (
+                new_target,
+                format!("127.0.0.1:{}", server.port),
+                Some("http://evil.example"),
+                "403",
+            ),
+            (
+                old_target,
+                format!("127.0.0.1:{}", server.port),
+                None,
+                "403",
+            ),
+        ] {
+            let mut stream = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let origin = origin.map_or(String::new(), |value| format!("Origin: {value}\r\n"));
+            let target = if target.starts_with('/') {
+                target.to_string()
+            } else {
+                format!("/{target}")
+            };
+            write!(
+                stream,
+                "GET {target} HTTP/1.1\r\nHost: {host}\r\n{origin}\r\n"
+            )
+            .unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with(&format!("HTTP/1.1 {expected}")));
+        }
+
+        for headers in [
+            vec!["Host: evil.example", "Host: valid.example"],
+            vec!["Host: valid.example", "Host: evil.example"],
+            vec!["Host: valid.example", "Origin: http://evil", "Origin: null"],
+        ] {
+            assert!(security_headers(headers.into_iter()).is_err());
+        }
+        let host = "127.0.0.1:1234";
+        assert_eq!(
+            security_headers(["Host: 127.0.0.1:1234", "Origin: http://127.0.0.1:1234"].into_iter()),
+            Ok((host.into(), Some(format!("http://{host}"))))
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }
