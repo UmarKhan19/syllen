@@ -1,7 +1,5 @@
 // One job per process: transcribe a 16 kHz mono WAV and stream NDJSON to stdout.
 // The API is documented at https://github.com/Desert-Ant-Labs/desert-ant-core.
-import { Voz } from "@desert-ant-labs/voz";
-import * as ort from "onnxruntime-node";
 import { createVozFetch, removeInvalidVozCache, VOZ_REVISION } from "./model-integrity.mjs";
 
 const audioPath = process.argv[2];
@@ -16,6 +14,8 @@ if (!audioPath) {
 }
 
 try {
+  const { Voz } = await import("@desert-ant-labs/voz");
+  const ort = await import("onnxruntime-node");
   await removeInvalidVozCache();
   globalThis.fetch = createVozFetch(globalThis.fetch);
   const voz = await Voz.load({

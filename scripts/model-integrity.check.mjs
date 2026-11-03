@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -119,12 +119,24 @@ test("tampered Voz cache entries are removed before the SDK reads them", async (
   }
 });
 
-test("sidecar resolves public Voz exports and exits before model loading without an audio path", () => {
-  const server = new URL("../src-tauri/sidecar/server.mjs", import.meta.url);
-  const result = spawnSync(process.execPath, [server.pathname], { encoding: "utf8" });
-  assert.equal(result.status, 2, result.stderr);
-  assert.equal(JSON.parse(result.stdout.trim()).message, "usage: node server.mjs <audio.wav>");
-  assert.doesNotMatch(result.stderr, /ERR_PACKAGE_PATH_NOT_EXPORTED/);
+test("sidecar reports missing audio without installed inference dependencies", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sidecar-usage-"));
+  const sidecar = join(root, "sidecar");
+  await mkdir(sidecar);
+  try {
+    for (const file of ["server.mjs", "model-integrity.mjs"]) {
+      await copyFile(new URL(`../src-tauri/sidecar/${file}`, import.meta.url), join(sidecar, file));
+    }
+    const result = spawnSync(process.execPath, [join(sidecar, "server.mjs")], { encoding: "utf8" });
+    assert.equal(result.status, 2, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      type: "error",
+      message: "usage: node server.mjs <audio.wav>",
+    });
+    assert.doesNotMatch(result.stderr, /ERR_MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("LiteRT worker does not load executable code from a remote URL", async () => {
