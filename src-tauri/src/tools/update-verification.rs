@@ -197,9 +197,15 @@ fn verify_before_install<T>(
     install()
 }
 
-async fn fetch(client: &reqwest::Client, url: String, limit: usize) -> Result<Vec<u8>, String> {
+async fn fetch(
+    client: &reqwest::Client,
+    url: String,
+    limit: usize,
+    timeout: Duration,
+) -> Result<Vec<u8>, String> {
     let response = client
         .get(url)
+        .timeout(timeout)
         .send()
         .await
         .map_err(|e| format!("Could not reach GitHub: {e}"))?
@@ -304,14 +310,34 @@ pub(super) async fn update(app: &AppHandle, asset: &str) -> Result<String, Strin
     let client = reqwest::Client::builder()
         .redirect(https_redirects())
         .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .read_timeout(Duration::from_secs(30))
         .user_agent("yt-transcript/0.1")
         .build()
         .map_err(|e| format!("Could not start the download: {e}"))?;
     let tag = release_tag().await?;
     let base = format!("https://github.com/yt-dlp/yt-dlp/releases/download/{tag}");
-    let manifest = fetch(&client, format!("{base}/SHA2-256SUMS"), MANIFEST_LIMIT).await?;
-    let signature = fetch(&client, format!("{base}/SHA2-256SUMS.sig"), SIGNATURE_LIMIT).await?;
-    let bytes = fetch(&client, format!("{base}/{asset}"), ASSET_LIMIT).await?;
+    let manifest = fetch(
+        &client,
+        format!("{base}/SHA2-256SUMS"),
+        MANIFEST_LIMIT,
+        Duration::from_secs(30),
+    )
+    .await?;
+    let signature = fetch(
+        &client,
+        format!("{base}/SHA2-256SUMS.sig"),
+        SIGNATURE_LIMIT,
+        Duration::from_secs(30),
+    )
+    .await?;
+    let bytes = fetch(
+        &client,
+        format!("{base}/{asset}"),
+        ASSET_LIMIT,
+        Duration::from_secs(5 * 60),
+    )
+    .await?;
     verify_before_install(&manifest, &signature, PUBLIC_KEY, asset, &bytes, || {
         install_verified(app, &bytes)
     })?;
@@ -433,15 +459,22 @@ mod tests {
                 Ok(())
             },
         );
-        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Could not initialize yt-dlp release signature verification."
+        );
         assert!(!called);
 
+        let bytes = vec![b'x'; MIN_ASSET_SIZE];
         let result =
-            verify_before_install(MANIFEST, SIGNATURE, PUBLIC_KEY, "yt-dlp", b"asset", || {
+            verify_before_install(MANIFEST, SIGNATURE, PUBLIC_KEY, "yt-dlp", &bytes, || {
                 called = true;
                 Ok(())
             });
-        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "The yt-dlp download does not match its signed SHA-256 checksum."
+        );
         assert!(!called);
     }
 
