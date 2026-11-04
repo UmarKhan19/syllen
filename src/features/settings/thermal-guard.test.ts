@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   persistThermalGuard,
+  unavailableThermalStatus,
   readThermalGuard,
   validateThermalStatus,
   waitForThermalCooldown,
@@ -59,6 +60,20 @@ describe("Thermal Guard setting", () => {
     expect(status).toEqual(cool);
   });
 
+  it("returns unavailable immediately when the initial sensor read fails", async () => {
+    const unavailable = unavailableThermalStatus("Sensor unavailable.");
+    const sleep = vi.fn();
+    const status = await waitForThermalCooldown(
+      vi.fn().mockResolvedValue(unavailable),
+      new AbortController().signal,
+      sleep,
+      () => 0,
+      true,
+    );
+    expect(status).toEqual(unavailable);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("keeps waiting after a hot caller observation while between pause and resume", async () => {
     let time = 0;
     const readings = [
@@ -81,6 +96,37 @@ describe("Thermal Guard setting", () => {
     );
     expect(result.temperatureC).toBe(79);
     expect(sleep).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([
+    ["sensor becomes unavailable", unavailableThermalStatus("Sensor disconnected.")],
+    ["temperature reading is lost", { ...cool, temperatureC: null }],
+    ["pause threshold is lost", { ...cool, pauseAtC: null }],
+    ["resume threshold is lost", { ...cool, resumeAtC: null }],
+  ])("returns unavailable when %s during cooldown", async (_scenario, lostStatus) => {
+    const controller = new AbortController();
+    const readings = [{ ...cool, temperatureC: 89 }, lostStatus];
+    const readStatus = vi.fn(async () => readings.shift() ?? lostStatus);
+    let sleeps = 0;
+    const sleep = vi.fn(async (_ms: number, signal: AbortSignal) => {
+      if (++sleeps === 2) {
+        controller.abort();
+        if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
+      }
+    });
+
+    const result = await waitForThermalCooldown(
+      readStatus,
+      controller.signal,
+      sleep,
+      () => 0,
+      true,
+    );
+
+    expect(result).toMatchObject({ available: false });
+    expect(result.reason).toBeTruthy();
+    expect(readStatus).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
   });
 
   it("requires continuous dwell at or below resume and resets when warmer", async () => {

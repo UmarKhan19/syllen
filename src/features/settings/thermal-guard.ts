@@ -70,7 +70,7 @@ export async function waitForThermalCooldown(
       readStatus().then(
         (value) => {
           signal.removeEventListener("abort", onAbort);
-          resolve(value);
+          resolve(validateThermalStatus(value));
         },
         (error: unknown) => {
           signal.removeEventListener("abort", onAbort);
@@ -101,6 +101,7 @@ export async function waitForThermalCooldown(
 
     await sleep(1000, signal);
     status = await readOrAbort();
+    if (!status.available) return status;
   }
   throw new DOMException("Cancelled", "AbortError");
 }
