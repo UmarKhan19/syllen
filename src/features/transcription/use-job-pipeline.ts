@@ -262,6 +262,7 @@ export function useJobPipeline(
               mine.controller.signal,
               waitSleep,
               Date.now,
+              true,
             );
             if (!isCurrent()) return;
             setThermalStatus(cool);

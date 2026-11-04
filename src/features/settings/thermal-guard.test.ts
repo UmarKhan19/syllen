@@ -59,6 +59,30 @@ describe("Thermal Guard setting", () => {
     expect(status).toEqual(cool);
   });
 
+  it("keeps waiting after a hot caller observation while between pause and resume", async () => {
+    let time = 0;
+    const readings = [
+      { ...cool, temperatureC: 89 },
+      { ...cool, temperatureC: 79 },
+      { ...cool, temperatureC: 81 },
+      { ...cool, temperatureC: 79 },
+      { ...cool, temperatureC: 79 },
+      { ...cool, temperatureC: 79 },
+    ];
+    const sleep = vi.fn(async () => {
+      time += 1000;
+    });
+    const result = await waitForThermalCooldown(
+      async () => readings.shift() ?? cool,
+      new AbortController().signal,
+      sleep,
+      () => time,
+      true,
+    );
+    expect(result.temperatureC).toBe(79);
+    expect(sleep).toHaveBeenCalledTimes(5);
+  });
+
   it("requires continuous dwell at or below resume and resets when warmer", async () => {
     let time = 0;
     const readings = [

@@ -60,6 +60,7 @@ export async function waitForThermalCooldown(
   signal: AbortSignal,
   sleep: (ms: number, signal: AbortSignal) => Promise<void>,
   now: () => number,
+  hotObserved = false,
 ): Promise<ThermalStatus> {
   const readOrAbort = () =>
     new Promise<ThermalStatus>((resolve, reject) => {
@@ -82,7 +83,8 @@ export async function waitForThermalCooldown(
   if (
     status.temperatureC !== null &&
     status.pauseAtC !== null &&
-    status.temperatureC < status.pauseAtC
+    status.temperatureC < status.pauseAtC &&
+    !hotObserved
   )
     return status;
 
