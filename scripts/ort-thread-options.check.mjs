@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseCpuThreads, withCpuThreadLimit } from "../src-tauri/sidecar/ort-thread-options.mjs";
 
-test("thread count defaults balanced and rejects malformed or excessive values", () => {
+test("thread count defaults balanced, clamps to the available CPUs, and rejects invalid values", () => {
   assert.equal(parseCpuThreads(undefined, 5), 2);
   assert.equal(parseCpuThreads("1", 5), 1);
+  assert.equal(parseCpuThreads("2", 4), 2);
+  assert.equal(parseCpuThreads("12", 4), 4);
+  assert.equal(parseCpuThreads("9007199254740991", 4), 4);
   for (const value of ["0", "-1", "1.5", "2x", "9007199254740992"]) {
     assert.throws(() => parseCpuThreads(value, 5));
   }
-  assert.throws(() => parseCpuThreads("6", 5));
 });
 
 test("all model sessions get bounded native options while module APIs are preserved", async () => {

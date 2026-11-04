@@ -2,10 +2,8 @@ export function parseCpuThreads(value, available = 1) {
   if (value === undefined) return Math.max(1, Math.floor(available / 2));
   if (!/^[1-9]\d*$/.test(value)) throw new Error("SYLLEN_CPU_THREADS must be a positive integer");
   const threads = Number(value);
-  if (!Number.isSafeInteger(threads) || threads > available) {
-    throw new Error("SYLLEN_CPU_THREADS exceeds available logical CPUs");
-  }
-  return threads;
+  if (!Number.isSafeInteger(threads)) throw new Error("SYLLEN_CPU_THREADS must be a safe integer");
+  return Math.min(threads, Number.isFinite(available) ? Math.max(1, Math.floor(available)) : 1);
 }
 
 export function withCpuThreadLimit(ort, threads) {
