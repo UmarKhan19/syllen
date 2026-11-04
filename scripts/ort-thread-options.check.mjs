@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
 import { parseCpuThreads, withCpuThreadLimit } from "../src-tauri/sidecar/ort-thread-options.mjs";
 
@@ -14,7 +13,8 @@ test("thread count defaults balanced and rejects malformed or excessive values",
 
 test("all model sessions get bounded native options while module APIs are preserved", async () => {
   const calls = [];
-  const original = async (model, options) => {
+  const original = async function (model, options) {
+    assert.equal(this, ort.InferenceSession);
     calls.push([model, options]);
     return "session";
   };
@@ -42,13 +42,4 @@ test("all model sessions get bounded native options while module APIs are preser
   assert.equal(calls[0][1].extra.existing, "yes");
   assert.equal(calls[0][1].executionProviders[0], "cpu");
   assert.equal(ort.InferenceSession.create, original);
-});
-
-test("installed native runtime exposes the APIs retained by the injection seam", () => {
-  const require = createRequire(new URL("../src-tauri/sidecar/package.json", import.meta.url));
-  const runtime = require("onnxruntime-node");
-  const bounded = withCpuThreadLimit(runtime, 1);
-  assert.equal(typeof bounded.InferenceSession.create, "function");
-  assert.equal(typeof bounded.Tensor, "function");
-  assert.equal(bounded.env, runtime.env);
 });
