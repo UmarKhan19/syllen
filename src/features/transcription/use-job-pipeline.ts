@@ -33,6 +33,34 @@ export function retainJobForWhoRetry<T extends { generation: number }>(
   return job ? { ...job, generation } : null;
 }
 
+export async function cancelJob(
+  invokeCancel: () => Promise<unknown>,
+  isCurrent: () => boolean,
+  onCancelled: () => void,
+  onError: (problem: unknown) => void,
+  starting?: Promise<JobStarted> | null,
+  onStarted?: (started: JobStarted) => void,
+) {
+  try {
+    if (starting) {
+      let accepted: JobStarted;
+      try {
+        accepted = await starting;
+      } catch {
+        if (isCurrent()) onCancelled();
+        return;
+      }
+      if (!isCurrent()) return;
+      onStarted?.(accepted);
+    }
+    if (!isCurrent()) return;
+    await invokeCancel();
+    if (isCurrent()) onCancelled();
+  } catch (problem) {
+    if (isCurrent()) onError(problem);
+  }
+}
+
 export function startJob(
   source: { path: string } | { url: string },
   resourcePreset: ResourcePreset,
@@ -76,9 +104,12 @@ export function useJobPipeline(
   const current = useRef<{
     id: string | null;
     generation: number;
+    startGeneration: number;
     enabled: boolean;
     label: boolean;
+    cancelRequested?: boolean;
   } | null>(null);
+  const starting = useRef<{ generation: number; promise: Promise<JobStarted> } | null>(null);
   const generation = useRef(0);
   const attempt = useRef<Attempt | null>(null);
   const pendingResults = useRef(new Map<string, JobResult>());
@@ -335,6 +366,11 @@ export function useJobPipeline(
       listen<JobError>("job:error", (event) => {
         if (!matchesActiveJobId(current.current?.id ?? null, event.payload.jobId)) return;
         if (event.payload.message === "Cancelled") {
+          ++generation.current;
+          current.current = null;
+          retryTranscript.current = null;
+          pendingResults.current.clear();
+          pendingThermal.current.clear();
           abortAttempt();
           setPhase("idle");
           setProgress(null);
@@ -352,8 +388,10 @@ export function useJobPipeline(
           pendingResults.current.set(value.jobId, value);
           return;
         }
-        if (current.current.id === value.jobId)
-          void processResult(value, current.current.generation);
+        if (current.current.id === value.jobId) {
+          if (current.current.cancelRequested) pendingResults.current.set(value.jobId, value);
+          else void processResult(value, current.current.generation);
+        }
       }),
     );
     track(
@@ -386,6 +424,7 @@ export function useJobPipeline(
     current.current = {
       id: null,
       generation: jobGeneration,
+      startGeneration: jobGeneration,
       enabled: thermalGuardEnabled,
       label: speakerLabelsRef.current,
     };
@@ -402,8 +441,12 @@ export function useJobPipeline(
     setThermalState("monitoring");
     setProgress({ jobId: "", stage: "path" in source ? "convert" : "metadata", percent: null });
     setPhase("running");
+    let pending: { generation: number; promise: Promise<JobStarted> } | null = null;
     try {
-      const started = await startJob(source, resourcePreset, thermalGuardEnabled);
+      const promise = startJob(source, resourcePreset, thermalGuardEnabled);
+      pending = { generation: jobGeneration, promise };
+      starting.current = pending;
+      const started = await promise;
       if (generation.current !== jobGeneration) return;
       current.current.id = started.job_id;
       const earlyThermal = pendingThermal.current.get(started.job_id);
@@ -419,6 +462,8 @@ export function useJobPipeline(
       if (generation.current !== jobGeneration) return;
       setError(String(problem));
       setPhase("error");
+    } finally {
+      if (pending && starting.current === pending) starting.current = null;
     }
   }
 
@@ -432,16 +477,51 @@ export function useJobPipeline(
       setPhase("done");
       return;
     }
-    ++generation.current;
-    current.current = null;
-    retryTranscript.current = null;
-    abortAttempt();
-    try {
-      await invoke("cancel_job");
-    } catch (problem) {
-      setError(String(problem));
-      setPhase("error");
+    const active = current.current;
+    const startingJob =
+      active && active.id === null && starting.current?.generation === active.startGeneration
+        ? starting.current
+        : null;
+    const jobGeneration = ++generation.current;
+    if (current.current) {
+      current.current.generation = jobGeneration;
+      current.current.cancelRequested = true;
     }
+    abortAttempt();
+    await cancelJob(
+      () => (current.current?.cancelRequested ? invoke("cancel_job") : Promise.resolve()),
+      () => generation.current === jobGeneration && current.current?.generation === jobGeneration,
+      () => {
+        pendingResults.current.clear();
+        pendingThermal.current.clear();
+        ++generation.current;
+        current.current = null;
+        retryTranscript.current = null;
+        setProgress(null);
+        setPhase("idle");
+      },
+      (problem) => {
+        setError(String(problem));
+        const active = current.current;
+        if (!active || active.generation !== jobGeneration) return;
+        active.cancelRequested = false;
+        if (active.id) {
+          const earlyThermal = pendingThermal.current.get(active.id);
+          pendingThermal.current.clear();
+          if (earlyThermal) {
+            setThermalStatus(earlyThermal.status);
+            setThermalState(earlyThermal.state);
+          }
+          const early = pendingResults.current.get(active.id);
+          pendingResults.current.clear();
+          if (early) void processResult(early, jobGeneration);
+        }
+      },
+      startingJob?.promise,
+      (started) => {
+        if (current.current?.generation === jobGeneration) current.current.id = started.job_id;
+      },
+    );
   }
 
   const retryWho = useCallback(() => {
