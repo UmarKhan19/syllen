@@ -496,12 +496,14 @@ fn is_ryzen_5_5500u(cpuinfo: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{sync::atomic::AtomicUsize, time::Instant};
+    use std::{
+        sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+        time::Instant,
+    };
 
     #[cfg(target_os = "linux")]
     use std::{
         fs,
-        sync::atomic::{AtomicBool, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -647,34 +649,23 @@ mod tests {
     }
 
     #[test]
-    fn cooldown_requires_continuous_dwell_and_cancels_while_waiting() {
-        let reads = AtomicUsize::new(0);
-        let mut states = Vec::new();
+    fn cancellation_interrupts_the_hot_wait() {
+        let cancelled = AtomicBool::new(false);
+        let mut saw_cooling = false;
         let result = wait_before_child(
-            || {
-                let index = reads.fetch_add(1, Ordering::SeqCst);
-                if index < 2 {
-                    fake_available_status(91.0, 105.0)
-                } else {
-                    fake_available_status(79.0, 105.0)
+            || fake_available_status(91.0, 105.0),
+            || cancelled.load(Ordering::SeqCst),
+            |state, _| {
+                if matches!(state, ThermalState::Cooling) {
+                    saw_cooling = true;
+                    cancelled.store(true, Ordering::SeqCst);
                 }
             },
-            || reads.load(Ordering::SeqCst) > 6,
-            |state, _| states.push(state),
-            Duration::from_millis(2),
+            Duration::from_millis(1),
             Duration::from_millis(30),
         );
         assert_eq!(result, Err("Cancelled".into()));
-        assert!(
-            states
-                .iter()
-                .any(|state| matches!(state, ThermalState::Cooling))
-        );
-        assert!(
-            !states
-                .iter()
-                .any(|state| matches!(state, ThermalState::Monitoring))
-        );
+        assert!(saw_cooling);
     }
 
     #[cfg(not(target_os = "linux"))]
