@@ -1,25 +1,25 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { mergeWords } from "./lib/transcript";
-import { formatClock, toTxt } from "./lib/captions";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { makeSavedWhen } from "./features/library/date-label";
-import { formatBytes } from "./lib/format-bytes";
-import type { FileInfo, LibraryItem } from "./lib/wire-types";
-import { usePlayback } from "./features/playback/use-playback";
-import { useJobPipeline } from "./features/transcription/use-job-pipeline";
-import { useLibrary } from "./features/library/use-library";
-import { useSettings } from "./features/settings/use-settings";
-import { SourceForm } from "./features/transcription/source-form";
-import { JobProgress } from "./features/transcription/job-progress";
 import { LibraryDrawer } from "./features/library/library-drawer";
+import { useLibrary } from "./features/library/use-library";
+import { usePlayback } from "./features/playback/use-playback";
 import { SettingsDrawer } from "./features/settings/settings-drawer";
+import { useSettings } from "./features/settings/use-settings";
+import { type ExportKind, exportTranscript } from "./features/transcript/transcript-export";
 import { TranscriptWorkspace } from "./features/transcript/transcript-workspace";
-import { exportTranscript, type ExportKind } from "./features/transcript/transcript-export";
-import { AlertIcon, LibraryIcon } from "./icons";
-import { useUnsavedWordGuard } from "./features/transcript/use-unsaved-word-guard";
 import { useTranscriptSession } from "./features/transcript/use-transcript-session";
+import { useUnsavedWordGuard } from "./features/transcript/use-unsaved-word-guard";
+import { JobProgress } from "./features/transcription/job-progress";
+import { SourceForm } from "./features/transcription/source-form";
+import { useJobPipeline } from "./features/transcription/use-job-pipeline";
+import { AlertIcon, LibraryIcon } from "./icons";
+import { formatClock, toTxt } from "./lib/captions";
+import { formatBytes } from "./lib/format-bytes";
+import { mergeWords } from "./lib/transcript";
+import type { FileInfo, LibraryItem } from "./lib/wire-types";
 
 type FileSource = { path: string; name: string; size: number };
 const STEPS_URL = [
@@ -301,7 +301,11 @@ export default function App() {
     transcriptSession.clearNames();
     setLibraryOpen(false);
     library.setDeletingId(null);
-    await job.start(file ? { path: file.path } : { url: normalizeUrl(value) });
+    await job.start(
+      file ? { path: file.path } : { url: normalizeUrl(value) },
+      settings.resourcePreset,
+      settings.thermalGuardEnabled,
+    );
   }
   async function copyTranscript() {
     if (!job.result || wordEditing) return;
@@ -486,8 +490,31 @@ export default function App() {
           phase={job.phase}
           progress={job.progress}
           whoProgress={job.whoProgress}
+          thermalState={job.thermalState}
           steps={steps}
         />
+        {(job.phase === "running" || job.phase === "who") && job.thermalState === "cooling" && (
+          <p
+            className="mt-2 m-0 text-meta leading-[1.6] text-ink-2"
+            role="status"
+            aria-live="polite"
+          >
+            CPU reached the {job.thermalStatus?.pauseAtC} °C pause limit. Processing resumes after
+            it stays at or below {job.thermalStatus?.resumeAtC} °C for{" "}
+            {job.thermalStatus?.coolDwellSeconds}s.
+          </p>
+        )}
+        {job.phase === "running" && job.thermalState === "unavailable" && (
+          <p
+            className="mt-2 m-0 text-meta leading-[1.6] text-alert"
+            role="status"
+            aria-live="polite"
+          >
+            Thermal protection unavailable:{" "}
+            {job.thermalStatus?.reason ?? "CPU temperature or limits could not be read."} Continuing
+            without automatic protection.
+          </p>
+        )}
         {job.error && (
           <section className={ALERT} role="alert">
             <AlertIcon />
@@ -505,30 +532,48 @@ export default function App() {
           </section>
         )}
         {job.result && (
-          <TranscriptWorkspace
-            result={job.result}
-            segments={job.segments}
-            speakerCount={job.speakerCount}
-            whoError={job.whoError}
-            speakerNames={transcriptSession.speakerNames}
-            wordEditing={wordEditing}
-            canEditWords={canEditWords}
-            playback={playback}
-            onCopy={copyTranscript}
-            onExport={exportAs}
-            onRename={transcriptSession.renameSpeaker}
-            onSaveWords={transcriptSession.saveWordCorrections}
-            onEditStateChange={(editing, saving = false, dirty = false) => {
-              wordEditingRef.current = editing;
-              wordSavingRef.current = saving;
-              wordDirtyRef.current = dirty;
-              setWordEditing(editing);
-            }}
-            editButtonRef={editButtonRef}
-            toolbarCancelRef={toolbarCancelRef}
-            toolbarSaveRef={toolbarSaveRef}
-            titleRef={resultTitleRef}
-          />
+          <>
+            {(job.whoError?.includes("thermal pause limit") ||
+              job.whoError === "Speaker analysis cancelled.") && (
+              <section
+                className="mt-4.5 flex flex-wrap items-center justify-between gap-3 border-y border-rule py-3 text-meta leading-[1.6] text-ink-2"
+                role="status"
+              >
+                <span>Speaker analysis stopped. The transcript and audio remain available.</span>
+                <button
+                  type="button"
+                  className="inline-flex h-8.5 shrink-0 items-center justify-center rounded-control border border-rule bg-transparent px-3 text-small whitespace-nowrap text-ink-2 transition-colors duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  onClick={job.retryWho}
+                >
+                  Retry speaker analysis
+                </button>
+              </section>
+            )}
+            <TranscriptWorkspace
+              result={job.result}
+              segments={job.segments}
+              speakerCount={job.speakerCount}
+              whoError={job.whoError}
+              speakerNames={transcriptSession.speakerNames}
+              wordEditing={wordEditing}
+              canEditWords={canEditWords}
+              playback={playback}
+              onCopy={copyTranscript}
+              onExport={exportAs}
+              onRename={transcriptSession.renameSpeaker}
+              onSaveWords={transcriptSession.saveWordCorrections}
+              onEditStateChange={(editing, saving = false, dirty = false) => {
+                wordEditingRef.current = editing;
+                wordSavingRef.current = saving;
+                wordDirtyRef.current = dirty;
+                setWordEditing(editing);
+              }}
+              editButtonRef={editButtonRef}
+              toolbarCancelRef={toolbarCancelRef}
+              toolbarSaveRef={toolbarSaveRef}
+              titleRef={resultTitleRef}
+            />
+          </>
         )}
         {idle && (
           <section className="mt-11.5 border-t border-rule">
@@ -577,6 +622,11 @@ export default function App() {
         busy={busy}
         speakerLabels={settings.speakerLabels}
         onToggleSpeakerLabels={settings.toggleSpeakerLabels}
+        resourcePreset={settings.resourcePreset}
+        onResourcePresetChange={settings.setResourcePreset}
+        thermalGuardEnabled={settings.thermalGuardEnabled}
+        onThermalGuardChange={settings.setThermalGuardEnabled}
+        thermalStatus={settings.thermalStatus}
         tools={settings.tools}
         updating={settings.updating}
         updateMessage={settings.updateMessage}

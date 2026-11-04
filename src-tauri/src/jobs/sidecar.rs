@@ -8,6 +8,7 @@ use crate::{
     events::emit_progress,
     job_control::JobControl,
     process::{run_streaming, tail},
+    thermal::JobThermalGuard,
     tools::Tools,
 };
 
@@ -19,15 +20,18 @@ pub(super) fn transcribe(
     app: &AppHandle,
     id: &str,
     control: &JobControl,
+    cpu_threads: usize,
+    thermal_guard: &JobThermalGuard,
 ) -> Result<(String, Vec<Word>, Option<f64>), String> {
     let mut cmd = Command::new(&tools.node);
     cmd.current_dir(&tools.sidecar)
         .arg("server.mjs")
         .arg(audio)
-        .env("DAL_APP_ID", DAL_APP_ID);
+        .env("DAL_APP_ID", DAL_APP_ID)
+        .env("SYLLEN_CPU_THREADS", cpu_threads.to_string());
     let mut result: Option<(String, Vec<Word>, Option<f64>)> = None;
     let mut sidecar_error: Option<String> = None;
-    let (status, stderr) = run_streaming(&mut cmd, control, &mut |line| {
+    let (status, stderr) = run_streaming(&mut cmd, control, thermal_guard, &mut |line| {
         let Ok(event) = serde_json::from_str::<SidecarEvent>(line) else {
             return;
         };

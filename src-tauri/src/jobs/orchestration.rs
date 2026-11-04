@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
     AppState, contracts::JobResult, events::emit_progress, job_control::JobControl,
-    tools::resolve_tools, waveform::wav_peaks,
+    thermal::JobThermalGuard, tools::resolve_tools, waveform::wav_peaks,
 };
 
 use super::{
@@ -20,7 +20,10 @@ pub(super) fn run_pipeline(
     id: &str,
     dir: &Path,
     source: &Source,
+    cpu_threads: usize,
+    thermal_guard_enabled: bool,
 ) -> Result<(), String> {
+    let thermal_guard = JobThermalGuard::new(app.clone(), id, thermal_guard_enabled);
     let tools = resolve_tools(app);
     let (title, metadata_duration, input, source_kind) = match source {
         Source::Url(url) => {
@@ -29,7 +32,16 @@ pub(super) fn run_pipeline(
             let (title, duration) = fetch_metadata(&tools, url)?;
             check_cancel(control)?;
             emit_progress(app, id, "download", Some(0.0));
-            download(&tools, url, dir, app, id, control)?;
+            download(
+                &tools,
+                url,
+                dir,
+                app,
+                id,
+                control,
+                cpu_threads,
+                &thermal_guard,
+            )?;
             check_cancel(control)?;
             (title, duration, dir.join("audio.wav"), "url")
         }
@@ -44,9 +56,17 @@ pub(super) fn run_pipeline(
         }
     };
     emit_progress(app, id, "convert", None);
-    let audio = convert(&tools, &input, dir, control)?;
+    let audio = convert(&tools, &input, dir, control, cpu_threads, &thermal_guard)?;
     check_cancel(control)?;
-    let (text, words, audio_duration) = transcribe(&tools, &audio, app, id, control)?;
+    let (text, words, audio_duration) = transcribe(
+        &tools,
+        &audio,
+        app,
+        id,
+        control,
+        cpu_threads,
+        &thermal_guard,
+    )?;
     check_cancel(control)?;
     let duration = audio_duration.or(metadata_duration);
     let waveform = wav_peaks(&audio, 2000).unwrap_or_else(|error| {
@@ -91,6 +111,8 @@ pub(super) fn run_pipeline(
             text,
             words,
             saved,
+            cpu_threads,
+            thermal_guard_enabled,
         },
     )
     .map_err(|e| format!("Could not send the transcript to the app: {e}"))?;

@@ -13,6 +13,7 @@ mod media_server;
 mod process;
 #[path = "text-export.rs"]
 mod text_export;
+mod thermal;
 mod tools;
 mod waveform;
 
@@ -54,6 +55,7 @@ pub fn run() {
             media_file::file_info,
             jobs::start_job,
             jobs::cancel_job,
+            thermal::thermal_status,
             text_export::export_text,
             library_commands::list_library,
             library_commands::load_transcript,

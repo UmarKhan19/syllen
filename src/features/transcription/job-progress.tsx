@@ -5,11 +5,13 @@ export function JobProgress({
   phase,
   progress,
   whoProgress,
+  thermalState,
   steps,
 }: {
   phase: string;
   progress: ProgressEvent | null;
   whoProgress: { phase: string; fraction: number | null } | null;
+  thermalState: "monitoring" | "cooling" | "unavailable";
   steps: Step[];
 }) {
   const index = (stage: string | null) =>
@@ -70,7 +72,13 @@ export function JobProgress({
         })}
       </div>
       <div className="mt-5 flex items-baseline justify-between gap-3.5 text-[16px] font-medium text-ink">
-        <span aria-live="polite">{phase === "who" ? label : stageLabel}</span>
+        <span aria-live="polite">
+          {thermalState === "cooling"
+            ? "Cooling down before processing resumes"
+            : phase === "who"
+              ? label
+              : stageLabel}
+        </span>
         {show && (
           <span className="font-mono text-meta font-normal text-ink-3 tabular-nums">
             {Math.round((shown ?? 0) * 100)}%

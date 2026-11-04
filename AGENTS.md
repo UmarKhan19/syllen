@@ -53,7 +53,7 @@ frontend tests, clippy, and Rust tests remain opt-in with `SYLLEN_RUN_PREPUSH=1 
 | `src-tauri/tests/asset-protocol-scope.rs` | Asset protocol glob scope regression test |
 | `src-tauri/src/tools.rs`, `events.rs`, `text-export.rs` | Tool resolution/status/update, job event emission, and text export command |
 | `src-tauri/src/jobs.rs` and `src-tauri/src/jobs/*.rs` | Job start/cancel/cache lifecycle, pipeline orchestration, source stages, sidecar protocol, and audio persistence |
-| `src-tauri/src/job-control.rs`, `process.rs` | Job control state and subprocess management |
+| `src-tauri/src/job-control.rs`, `process.rs`, `thermal.rs` | Job control, subprocess management, and Linux CPU thermal guard |
 | `src-tauri/src/media-file.rs`, `waveform.rs` | Media file validation and waveform generation |
 | `src-tauri/src/library.rs` | SQLite schema and CRUD, library audio directory, row and audio deletion |
 | `src-tauri/src/library-commands.rs` | Library Tauri commands |
@@ -77,14 +77,16 @@ and state. `lib.rs` remains app setup and command registration.
 - Media extensions are hand-synced: `MEDIA_EXTENSIONS` in `src/app.tsx` (file picker)
   and in `src-tauri/src/media-file.rs` (backend check) must stay identical, 31 entries today.
 - Tauri commands are the IPC surface: `check_tools`, `latest_yt_dlp_version`,
-  `update_yt_dlp`, `file_info`, `start_job`, `cancel_job`, `export_text`,
+  `update_yt_dlp`, `file_info`, `start_job`, `cancel_job`, `thermal_status`, `export_text`,
   `list_library`, `load_transcript`, `delete_transcript`, `save_analysis`,
   `save_speaker_names`, `save_word_corrections`. Register a new one in
   `generate_handler!` in `lib.rs` and call it from the owning `src/features/` hook or view.
   `export_text` receives a suggested filename, format and contents; Rust owns the save dialog and file write.
-- Events: `job:progress`, `job:error`, `job:result`. Their payloads are
-  `ProgressEvent`, `ErrorEvent`, and `JobResult` in `contracts.rs`; `use-job-pipeline.ts`
-  listens for them.
+- Events: `job:progress`, `job:error`, `job:result`, and `job:thermal`. Their payloads are
+  `ProgressEvent`, `ErrorEvent`, `JobResult`, and `ThermalEvent` in `contracts.rs`;
+  `use-job-pipeline.ts` listens for job events. `start_job` snapshots its optional
+  `thermal_guard_enabled` flag (default `true`); the guard reads supported Linux CPU
+  sensors only while a guarded job is active and pauses only its native child process group.
 - Chrome geometry is measured, not styled: the popover reads `data-app-topbar` on the
   App header and `data-reading-dock` on the dock, so those attributes must survive any
   markup change.
@@ -112,8 +114,9 @@ and state. `lib.rs` remains app setup and command registration.
   assert the IPC payload carries no destination path; config tests pin CSP and asset scope.
 - `cargo test` runs Rust tests colocated with their modules: library persistence and
   deletion, waveform peaks and short reads, media byte ranges, media-file validation,
-  export filename validation, asset scope glob matches, yt-dlp arguments, and audio
-  persistence. They use `temp_path()` under the system temp dir and clean up after themselves.
+  export filename validation, asset scope glob matches, yt-dlp arguments, thermal sensor
+  policy and child-group control, and audio persistence. They use temporary paths and
+  harmless child processes, and clean up after themselves.
 - Nothing covers React components, App wiring, Tauri commands end to end, the sidecar
   protocol, or a full job run. Check those by hand under Xvfb (below) and say what you
   checked in your report.

@@ -111,7 +111,7 @@ export function createWhoFetch(
     const cache = await cachePromise;
     const cached = await cache?.match(url.href);
     if (cached) {
-      const bytes = new Uint8Array(await cached.arrayBuffer());
+      const bytes = new Uint8Array<ArrayBuffer>(await cached.arrayBuffer());
       try {
         await verifyFile(name, bytes, files);
         return new Response(bytes, {
@@ -128,7 +128,7 @@ export function createWhoFetch(
     if (!response.ok) throw new Error(`Who model fetch failed: HTTP ${response.status}`);
     if (!allowedRedirect(response))
       throw new Error(`Unexpected Who model redirect: ${response.url}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array<ArrayBuffer>(await response.arrayBuffer());
     await verifyFile(name, bytes, files);
     const verified = new Response(bytes, {
       status: response.status,

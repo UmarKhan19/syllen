@@ -139,8 +139,12 @@ export function SourceForm(props: Props) {
             Cancel
           </button>
         ) : phase === "who" ? (
-          <button type="button" className={`${GHOST} px-3.5 text-small ${height}`} disabled>
-            Working…
+          <button
+            type="button"
+            className={`${GHOST} shrink-0 px-3.5 text-small ${height}`}
+            onClick={onCancel}
+          >
+            Cancel speaker analysis
           </button>
         ) : (
           <button
