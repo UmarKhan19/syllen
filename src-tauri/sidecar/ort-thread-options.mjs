@@ -20,14 +20,6 @@ export function withCpuThreadLimit(ort, threads) {
             ...options,
             intraOpNumThreads: threads,
             interOpNumThreads: 1,
-            extra: {
-              ...options.extra,
-              session: {
-                ...options.extra?.session,
-                "session.intra_op.allow_spinning": "0",
-                "session.inter_op.allow_spinning": "0",
-              },
-            },
           }]);
         },
       });

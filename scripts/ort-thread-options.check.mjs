@@ -8,12 +8,14 @@ test("thread count defaults balanced, clamps to the available CPUs, and rejects 
   assert.equal(parseCpuThreads("2", 4), 2);
   assert.equal(parseCpuThreads("12", 4), 4);
   assert.equal(parseCpuThreads("9007199254740991", 4), 4);
+  assert.equal(parseCpuThreads("12", 0), 1);
+  assert.equal(parseCpuThreads("12", Number.NaN), 1);
   for (const value of ["0", "-1", "1.5", "2x", "9007199254740992"]) {
     assert.throws(() => parseCpuThreads(value, 5));
   }
 });
 
-test("all model sessions get bounded native options while module APIs are preserved", async () => {
+test("all model sessions get native CPU options while caller options and module APIs are preserved", async () => {
   const calls = [];
   const original = async function (model, options) {
     assert.equal(this, ort.InferenceSession);
@@ -38,10 +40,9 @@ test("all model sessions get bounded native options while module APIs are preser
   for (const [, options] of calls) {
     assert.equal(options.intraOpNumThreads, 3);
     assert.equal(options.interOpNumThreads, 1);
-    assert.equal(options.extra.session["session.intra_op.allow_spinning"], "0");
-    assert.equal(options.extra.session["session.inter_op.allow_spinning"], "0");
   }
-  assert.equal(calls[0][1].extra.existing, "yes");
+  assert.deepEqual(calls[0][1].extra, { existing: "yes" });
+  assert.equal(calls[1][1].extra, undefined);
   assert.equal(calls[0][1].executionProviders[0], "cpu");
   assert.equal(ort.InferenceSession.create, original);
 });
