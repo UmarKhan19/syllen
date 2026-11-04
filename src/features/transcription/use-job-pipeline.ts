@@ -26,6 +26,27 @@ export function matchesActiveJobId(activeJobId: string | null, eventJobId: strin
   return activeJobId !== null && activeJobId === eventJobId;
 }
 
+export function receiveJobError(
+  event: JobError,
+  activeJobId: string | null,
+  pending: Map<string, JobError>,
+  apply: (error: JobError) => void,
+) {
+  if (activeJobId === null) pending.set(event.jobId, event);
+  else if (matchesActiveJobId(activeJobId, event.jobId)) apply(event);
+}
+
+export function replayPendingJobError(
+  jobId: string,
+  pending: Map<string, JobError>,
+  apply: (error: JobError) => void,
+): boolean {
+  const early = pending.get(jobId);
+  pending.clear();
+  if (early) apply(early);
+  return Boolean(early);
+}
+
 export function retainJobForWhoRetry<T extends { generation: number }>(
   job: T | null,
   generation: number,
@@ -114,6 +135,7 @@ export function useJobPipeline(
   const attempt = useRef<Attempt | null>(null);
   const pendingResults = useRef(new Map<string, JobResult>());
   const pendingThermal = useRef(new Map<string, ThermalEvent>());
+  const pendingErrors = useRef(new Map<string, JobError>());
   const retryTranscript = useRef<JobResult | null>(null);
 
   const abortAttempt = useCallback(
@@ -125,6 +147,28 @@ export function useJobPipeline(
       attempt.current = null;
     },
     [],
+  );
+
+  const applyJobError = useCallback(
+    (error: JobError) => {
+      if (error.message === "Cancelled") {
+        ++generation.current;
+        current.current = null;
+        retryTranscript.current = null;
+        pendingResults.current.clear();
+        pendingThermal.current.clear();
+        pendingErrors.current.clear();
+        abortAttempt();
+        setPhase("idle");
+        setProgress(null);
+        return;
+      }
+      abortAttempt();
+      setError(error.message);
+      setProgress(null);
+      setPhase("error");
+    },
+    [abortAttempt],
   );
 
   const saveSegments = useCallback(
@@ -364,21 +408,12 @@ export function useJobPipeline(
     track(listen<ProgressEvent>("job:progress", (event) => publishProgress(event.payload)));
     track(
       listen<JobError>("job:error", (event) => {
-        if (!matchesActiveJobId(current.current?.id ?? null, event.payload.jobId)) return;
-        if (event.payload.message === "Cancelled") {
-          ++generation.current;
-          current.current = null;
-          retryTranscript.current = null;
-          pendingResults.current.clear();
-          pendingThermal.current.clear();
-          abortAttempt();
-          setPhase("idle");
-          setProgress(null);
-          return;
-        }
-        abortAttempt();
-        setError(event.payload.message);
-        setPhase("error");
+        receiveJobError(
+          event.payload,
+          current.current?.id ?? null,
+          pendingErrors.current,
+          applyJobError,
+        );
       }),
     );
     track(
@@ -409,10 +444,11 @@ export function useJobPipeline(
     return () => {
       disposed = true;
       cancelAnimationFrame(progressFrame);
+      pendingErrors.current.clear();
       abortAttempt();
       for (const fn of unlisten) fn();
     };
-  }, [abortAttempt, processResult]);
+  }, [abortAttempt, applyJobError, processResult]);
 
   async function start(
     source: { path: string } | { url: string },
@@ -431,6 +467,7 @@ export function useJobPipeline(
     retryTranscript.current = null;
     pendingResults.current.clear();
     pendingThermal.current.clear();
+    pendingErrors.current.clear();
     setError(null);
     setResult(null);
     setSegments([]);
@@ -458,8 +495,10 @@ export function useJobPipeline(
       const early = pendingResults.current.get(started.job_id);
       pendingResults.current.clear();
       if (early) void processResult(early, jobGeneration);
+      replayPendingJobError(started.job_id, pendingErrors.current, applyJobError);
     } catch (problem) {
       if (generation.current !== jobGeneration) return;
+      pendingErrors.current.clear();
       setError(String(problem));
       setPhase("error");
     } finally {
@@ -494,6 +533,7 @@ export function useJobPipeline(
       () => {
         pendingResults.current.clear();
         pendingThermal.current.clear();
+        pendingErrors.current.clear();
         ++generation.current;
         current.current = null;
         retryTranscript.current = null;
@@ -506,6 +546,7 @@ export function useJobPipeline(
         if (!active || active.generation !== jobGeneration) return;
         active.cancelRequested = false;
         if (active.id) {
+          if (replayPendingJobError(active.id, pendingErrors.current, applyJobError)) return;
           const earlyThermal = pendingThermal.current.get(active.id);
           pendingThermal.current.clear();
           if (earlyThermal) {
@@ -534,6 +575,7 @@ export function useJobPipeline(
   function clearSession() {
     ++generation.current;
     current.current = null;
+    pendingErrors.current.clear();
     retryTranscript.current = null;
     abortAttempt();
     setResult(null);
@@ -553,6 +595,7 @@ export function useJobPipeline(
   function showSaved(transcript: TranscriptResult, nextSegments: Segment[], count: number | null) {
     ++generation.current;
     current.current = null;
+    pendingErrors.current.clear();
     retryTranscript.current = null;
     abortAttempt();
     setResult(transcript);

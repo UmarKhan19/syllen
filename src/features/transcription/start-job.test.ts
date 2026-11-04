@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelJob, matchesActiveJobId, retainJobForWhoRetry, startJob } from "./use-job-pipeline";
+import {
+  cancelJob,
+  matchesActiveJobId,
+  receiveJobError,
+  replayPendingJobError,
+  retainJobForWhoRetry,
+  startJob,
+} from "./use-job-pipeline";
 
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn(), invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
@@ -39,6 +46,38 @@ describe("thermal event job filtering", () => {
     expect(matchesActiveJobId("new-job", "old-job")).toBe(false);
     expect(matchesActiveJobId(null, "new-job")).toBe(false);
     expect(matchesActiveJobId("new-job", "new-job")).toBe(true);
+  });
+});
+
+describe("job errors emitted before start acceptance", () => {
+  it("replays this job's early error through the normal error handler", () => {
+    const pending = new Map();
+    const state: { phase: string; progress: string | null; error: string | null } = {
+      phase: "running",
+      progress: "working",
+      error: null,
+    };
+    const apply = (error: { jobId: string; message: string }) => {
+      state.phase = "error";
+      state.progress = null;
+      state.error = error.message;
+    };
+
+    receiveJobError({ jobId: "job-1", message: "sidecar failed" }, null, pending, apply);
+    expect(state).toEqual({ phase: "running", progress: "working", error: null });
+    replayPendingJobError("job-1", pending, apply);
+
+    expect(state).toEqual({ phase: "error", progress: null, error: "sidecar failed" });
+    expect(pending.size).toBe(0);
+  });
+
+  it("discards an early error for a different accepted job", () => {
+    const pending = new Map();
+    const apply = vi.fn();
+    receiveJobError({ jobId: "old-job", message: "stale" }, null, pending, apply);
+    replayPendingJobError("new-job", pending, apply);
+    expect(apply).not.toHaveBeenCalled();
+    expect(pending.size).toBe(0);
   });
 });
 
