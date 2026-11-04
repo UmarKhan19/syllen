@@ -1,6 +1,4 @@
 use std::{
-    fs,
-    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -9,6 +7,9 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+
+#[cfg(target_os = "linux")]
+use std::{fs, path::Path};
 
 use tauri::{AppHandle, Emitter};
 
@@ -19,7 +20,9 @@ use crate::{
 
 const COOL_DWELL: Duration = Duration::from_secs(15);
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
+#[cfg(target_os = "linux")]
 const PAUSE_MARGIN_C: f64 = 15.0;
+#[cfg(target_os = "linux")]
 const RESUME_MARGIN_C: f64 = 10.0;
 
 #[tauri::command]
@@ -493,12 +496,28 @@ fn is_ryzen_5_5500u(cpuinfo: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{sync::atomic::AtomicUsize, time::Instant};
+
+    #[cfg(target_os = "linux")]
     use std::{
         fs,
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::atomic::{AtomicBool, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    fn fake_available_status(temperature_c: f64, limit_c: f64) -> ThermalStatus {
+        let pause_at_c = limit_c - 15.0;
+        ThermalStatus {
+            available: true,
+            temperature_c: Some(temperature_c),
+            pause_at_c: Some(pause_at_c),
+            resume_at_c: Some(pause_at_c - 10.0),
+            cool_dwell_seconds: COOL_DWELL.as_secs(),
+            reason: None,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn temp_root() -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
             "syllen-thermal-{}-{}",
@@ -510,6 +529,7 @@ mod tests {
         ))
     }
 
+    #[cfg(target_os = "linux")]
     fn sensor(root: &Path, name: &str, files: &[(&str, &str)]) {
         let dir = root.join(name);
         fs::create_dir_all(&dir).unwrap();
@@ -518,6 +538,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn only_known_cpu_sensor_drivers_and_critical_limits_are_accepted() {
         let root = temp_root();
@@ -539,6 +560,7 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn coretemp_uses_crit_not_max_and_derives_margins() {
         let root = temp_root();
@@ -564,6 +586,7 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn k10temp_uses_the_exact_verified_5500u_fallback_only() {
         let root = temp_root();
@@ -603,6 +626,7 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn malformed_sensor_values_are_explicitly_unavailable() {
         let root = temp_root();
@@ -630,9 +654,9 @@ mod tests {
             || {
                 let index = reads.fetch_add(1, Ordering::SeqCst);
                 if index < 2 {
-                    available_status(91.0, 105.0)
+                    fake_available_status(91.0, 105.0)
                 } else {
-                    available_status(79.0, 105.0)
+                    fake_available_status(79.0, 105.0)
                 }
             },
             || reads.load(Ordering::SeqCst) > 6,
@@ -650,6 +674,21 @@ mod tests {
             !states
                 .iter()
                 .any(|state| matches!(state, ThermalState::Monitoring))
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn thermal_status_is_unavailable_off_linux() {
+        let status = read_status();
+        assert!(!status.available);
+        assert_eq!(status.temperature_c, None);
+        assert!(
+            status
+                .reason
+                .as_deref()
+                .unwrap()
+                .contains("only supported on Linux")
         );
     }
 
@@ -678,9 +717,9 @@ mod tests {
         let reader_state = hot.clone();
         let reader = Arc::new(move || {
             if reader_state.load(Ordering::SeqCst) {
-                available_status(91.0, 105.0)
+                fake_available_status(91.0, 105.0)
             } else {
-                available_status(79.0, 105.0)
+                fake_available_status(79.0, 105.0)
             }
         });
         let monitor = start_monitor(
@@ -744,7 +783,7 @@ mod tests {
         let reader_reads = reads.clone();
         let reader = Arc::new(move || {
             if reader_reads.fetch_add(1, Ordering::SeqCst) == 0 {
-                available_status(91.0, 105.0)
+                fake_available_status(91.0, 105.0)
             } else {
                 unavailable("sensor disappeared", Some(91.0))
             }
@@ -801,7 +840,7 @@ mod tests {
             Arc::new(AtomicBool::new(false)),
             Arc::new(move || {
                 reader_samples.fetch_add(1, Ordering::SeqCst);
-                available_status(45.0, 105.0)
+                fake_available_status(45.0, 105.0)
             }),
             Arc::new(|_, _| {}),
             Duration::from_secs(1),
@@ -831,7 +870,7 @@ mod tests {
         let monitor = start_monitor(
             pid,
             Arc::new(AtomicBool::new(false)),
-            Arc::new(|| available_status(91.0, 105.0)),
+            Arc::new(|| fake_available_status(91.0, 105.0)),
             Arc::new(|_, _| {}),
             Duration::from_secs(1),
             Duration::from_secs(15),
@@ -880,7 +919,7 @@ mod tests {
         let monitor = start_monitor(
             pid,
             cancel.clone(),
-            Arc::new(|| available_status(91.0, 105.0)),
+            Arc::new(|| fake_available_status(91.0, 105.0)),
             Arc::new(|_, _| {}),
             Duration::from_secs(1),
             Duration::from_secs(15),

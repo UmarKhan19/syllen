@@ -19,6 +19,7 @@ pub(super) fn configure(cmd: &mut Command) {
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+        #[cfg(target_os = "linux")]
         let parent_pid = std::process::id() as i32;
         unsafe {
             cmd.pre_exec(move || {
@@ -28,10 +29,7 @@ pub(super) fn configure(cmd: &mut Command) {
                         return Err(std::io::Error::last_os_error());
                     }
                     if libc::getppid() != parent_pid {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Interrupted,
-                            "parent exited before child startup",
-                        ));
+                        return Err(std::io::Error::from_raw_os_error(libc::EINTR));
                     }
                 }
                 let current = libc::getpriority(libc::PRIO_PROCESS, 0);
