@@ -497,9 +497,12 @@ fn is_ryzen_5_5500u(cpuinfo: &str) -> bool {
 mod tests {
     use super::*;
     use std::{
-        sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+        sync::atomic::{AtomicBool, Ordering},
         time::Instant,
     };
+
+    #[cfg(target_os = "linux")]
+    use std::sync::atomic::AtomicUsize;
 
     #[cfg(target_os = "linux")]
     use std::{
