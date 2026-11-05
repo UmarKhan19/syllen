@@ -272,7 +272,7 @@ test("sidecar reports missing audio without installed inference dependencies", a
   const sidecar = join(root, "sidecar");
   await mkdir(sidecar);
   try {
-    for (const file of ["server.mjs", "model-integrity.mjs"]) {
+    for (const file of ["server.mjs", "model-integrity.mjs", "ort-thread-options.mjs"]) {
       await copyFile(new URL(`../src-tauri/sidecar/${file}`, import.meta.url), join(sidecar, file));
     }
     const result = spawnSync(process.execPath, [join(sidecar, "server.mjs")], { encoding: "utf8" });

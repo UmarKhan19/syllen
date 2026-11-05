@@ -2,7 +2,7 @@ import type { Turn } from "../../lib/transcript";
 
 export type WhoPhase = "model" | "diarize";
 
-export type WhoRequest = { id: number; audio: ArrayBuffer };
+export type WhoRequest = { id: number; audio: ArrayBuffer; cpuThreads: number };
 
 export type WhoMessage =
   | { type: "ready" }

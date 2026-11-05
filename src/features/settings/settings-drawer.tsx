@@ -1,7 +1,8 @@
-import { useEffect } from "react";
 import type { RefObject } from "react";
-import type { ToolsStatus } from "../../lib/wire-types";
+import { useEffect } from "react";
 import { CloseIcon } from "../../icons";
+import type { ResourcePreset } from "../../lib/resource-preset";
+import type { ThermalStatus, ToolsStatus } from "../../lib/wire-types";
 
 const FINE = "text-fine leading-[1.6] text-ink-3";
 const GHOST =
@@ -14,6 +15,11 @@ export function SettingsDrawer({
   busy,
   speakerLabels,
   onToggleSpeakerLabels,
+  resourcePreset,
+  onResourcePresetChange,
+  thermalGuardEnabled,
+  onThermalGuardChange,
+  thermalStatus,
   tools,
   updating,
   updateMessage,
@@ -31,6 +37,11 @@ export function SettingsDrawer({
   busy: boolean;
   speakerLabels: boolean;
   onToggleSpeakerLabels: () => void;
+  resourcePreset: ResourcePreset;
+  onResourcePresetChange: (preset: ResourcePreset) => void;
+  thermalGuardEnabled: boolean;
+  onThermalGuardChange: (enabled: boolean) => void;
+  thermalStatus: ThermalStatus | null;
   tools: ToolsStatus | null;
   updating: boolean;
   updateMessage: string | null;
@@ -105,6 +116,82 @@ export function SettingsDrawer({
             />
           </button>
         </section>
+        <section className="border-t border-rule py-5">
+          <fieldset className="m-0 min-w-0 border-0 p-0">
+            <legend className="mb-1.5 text-[14px] font-semibold">Processing</legend>
+            <p className="m-0 mb-3 text-meta leading-[1.6] text-ink-2">
+              Limits model and audio-processing threads, not total CPU usage.
+            </p>
+            <div className="flex flex-col gap-2" role="radiogroup" aria-label="Processing preset">
+              {(
+                [
+                  ["performance", "Performance", "Allows up to the available threads per engine."],
+                  ["balanced", "Balanced", "Allows up to half the available threads per engine."],
+                  ["battery", "Battery", "Limits each engine to one thread."],
+                ] as const
+              ).map(([value, label, description]) => (
+                <label key={value} className="flex cursor-pointer items-start gap-2.5 text-small">
+                  <input
+                    type="radio"
+                    name="resource-preset"
+                    value={value}
+                    checked={resourcePreset === value}
+                    onChange={() => onResourcePresetChange(value)}
+                    className="mt-0.5 accent-ink"
+                    disabled={busy}
+                  />
+                  <span>
+                    <span className="block font-medium text-ink">{label}</span>
+                    <span className="block text-meta leading-[1.5] text-ink-3">{description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </section>
+        <section className="border-t border-rule py-5">
+          <label className="flex cursor-pointer items-start gap-2.5 text-small">
+            <input
+              type="checkbox"
+              checked={thermalGuardEnabled}
+              onChange={(event) => onThermalGuardChange(event.currentTarget.checked)}
+              className="mt-0.5 accent-ink"
+              disabled={busy}
+            />
+            <span>
+              <span className="block font-medium text-ink">Thermal Guard</span>
+              <span className="block text-meta leading-[1.5] text-ink-3">
+                Pause this job's processing children when the CPU gets hot.
+              </span>
+            </span>
+          </label>
+          <div className="mt-3 text-meta leading-[1.6] text-ink-2" aria-live="off">
+            {thermalStatus === null ? (
+              <p className="m-0">Checking CPU temperature and supported limits…</p>
+            ) : (
+              <>
+                <p className="m-0">
+                  CPU temperature:{" "}
+                  {thermalStatus.temperatureC === null
+                    ? "Unavailable"
+                    : `${thermalStatus.temperatureC.toFixed(1)} °C`}
+                </p>
+                {thermalStatus.available ? (
+                  <p className="m-0 mt-1 text-ink-3">
+                    Pause at {thermalStatus.pauseAtC} °C · resume at {thermalStatus.resumeAtC} °C
+                    after {thermalStatus.coolDwellSeconds}s cool.
+                  </p>
+                ) : (
+                  <p className="m-0 mt-1 text-ink-2" role="status" aria-live="off">
+                    {thermalStatus.reason ??
+                      "CPU temperature or supported limits could not be read."}{" "}
+                    Automatic thermal protection is unavailable; the job can continue without it.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </section>
         <section className="flex flex-col items-start gap-3 border-t border-rule py-5">
           <h3 className="mt-0 mb-1.5 text-[14px] font-semibold">yt-dlp</h3>
           <div className="flex flex-wrap items-center gap-2">
@@ -158,7 +245,7 @@ export function SettingsDrawer({
         </section>
         {busy && <p className={FINE}>Finish the current transcription to change these settings.</p>}
         <div className="mt-auto border-t border-rule pt-5">
-          <p className={FINE}>Settings apply to the next transcription.</p>
+          <p className={FINE}>Changes apply to the next job.</p>
         </div>
       </aside>
     </div>

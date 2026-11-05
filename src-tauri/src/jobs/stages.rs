@@ -9,13 +9,49 @@ use crate::{
     events::emit_progress,
     job_control::JobControl,
     process::{run_capture, run_streaming, tail},
+    thermal::JobThermalGuard,
     tools::Tools,
 };
 
-const YT_DLP_WAV_POSTPROCESSOR_ARGS: [&str; 2] = [
-    "--postprocessor-args",
-    "ExtractAudio+ffmpeg_o:-af aformat=sample_fmts=s16,aresample=16000 -ac 1 -ar 16000",
-];
+fn yt_dlp_postprocessor_args(cpu_threads: usize) -> [String; 2] {
+    [
+        format!(
+            "ExtractAudio+ffmpeg_i:-threads {cpu_threads} -filter_threads {cpu_threads} -filter_complex_threads {cpu_threads}"
+        ),
+        format!(
+            "ExtractAudio+ffmpeg_o:-threads {cpu_threads} -af aformat=sample_fmts=s16,aresample=16000 -ac 1 -ar 16000"
+        ),
+    ]
+}
+
+fn configure_ffmpeg_conversion(cmd: &mut Command, input: &Path, output: &Path, cpu_threads: usize) {
+    let threads = cpu_threads.to_string();
+    cmd.args([
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-threads",
+        &threads,
+        "-filter_threads",
+        &threads,
+        "-filter_complex_threads",
+        &threads,
+        "-i",
+    ])
+    .arg(input)
+    .args([
+        "-threads",
+        &threads,
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+    ])
+    .arg(output);
+}
 
 fn prepend_tool_path(cmd: &mut Command, tools: &Tools) {
     let Some(dir) = tools
@@ -80,6 +116,7 @@ pub(super) fn fetch_metadata(tools: &Tools, url: &str) -> Result<(String, Option
     Ok((title, duration))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn download(
     tools: &Tools,
     url: &str,
@@ -87,6 +124,8 @@ pub(super) fn download(
     app: &AppHandle,
     id: &str,
     control: &JobControl,
+    cpu_threads: usize,
+    thermal_guard: &JobThermalGuard,
 ) -> Result<(), String> {
     let template = dir.join("audio.%(ext)s");
     let mut cmd = Command::new(&tools.yt_dlp);
@@ -105,10 +144,12 @@ pub(super) fn download(
         "--audio-format",
         "wav",
     ]);
-    cmd.args(YT_DLP_WAV_POSTPROCESSOR_ARGS);
+    for args in yt_dlp_postprocessor_args(cpu_threads) {
+        cmd.args(["--postprocessor-args", &args]);
+    }
     prepend_tool_path(&mut cmd, tools);
     cmd.arg("-o").arg(&template).arg("--").arg(url);
-    let (status, stderr) = run_streaming(&mut cmd, control, &mut |line| {
+    let (status, stderr) = run_streaming(&mut cmd, control, thermal_guard, &mut |line| {
         if let Some(rest) = line.strip_prefix("download:")
             && let Ok(percent) = rest.trim().trim_end_matches('%').trim().parse::<f64>()
         {
@@ -145,14 +186,13 @@ pub(super) fn convert(
     input: &Path,
     dir: &Path,
     control: &JobControl,
+    cpu_threads: usize,
+    thermal_guard: &JobThermalGuard,
 ) -> Result<PathBuf, String> {
     let output = dir.join("audio16.wav");
     let mut cmd = Command::new(&tools.ffmpeg);
-    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
-        .arg(input)
-        .args(["-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le"])
-        .arg(&output);
-    let (status, stderr) = run_streaming(&mut cmd, control, &mut |_| {})?;
+    configure_ffmpeg_conversion(&mut cmd, input, &output, cpu_threads);
+    let (status, stderr) = run_streaming(&mut cmd, control, thermal_guard, &mut |_| {})?;
     if !status.success() {
         return Err(format!(
             "Could not convert the audio to 16 kHz mono.\n{}",
@@ -168,11 +208,41 @@ mod tests {
 
     #[test]
     fn yt_dlp_wav_filter_preserves_pcm16_before_resampling() {
-        assert_eq!(YT_DLP_WAV_POSTPROCESSOR_ARGS[0], "--postprocessor-args");
-        assert!(YT_DLP_WAV_POSTPROCESSOR_ARGS[1].starts_with("ExtractAudio+ffmpeg_o:-af "));
-        assert!(
-            YT_DLP_WAV_POSTPROCESSOR_ARGS[1].contains("aformat=sample_fmts=s16,aresample=16000")
+        let [input, output] = yt_dlp_postprocessor_args(3);
+        assert!(input.starts_with(
+            "ExtractAudio+ffmpeg_i:-threads 3 -filter_threads 3 -filter_complex_threads 3"
+        ));
+        assert!(output.starts_with("ExtractAudio+ffmpeg_o:-threads 3 -af "));
+        assert!(output.contains("aformat=sample_fmts=s16,aresample=16000"));
+        assert!(output.ends_with("-ac 1 -ar 16000"));
+    }
+
+    #[test]
+    fn ffmpeg_decoder_filters_and_encoder_are_thread_capped_in_position() {
+        let mut command = Command::new("ffmpeg");
+        configure_ffmpeg_conversion(
+            &mut command,
+            Path::new("input.wav"),
+            Path::new("out.wav"),
+            3,
         );
-        assert!(YT_DLP_WAV_POSTPROCESSOR_ARGS[1].ends_with("-ac 1 -ar 16000"));
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        let input = args.iter().position(|arg| arg == "-i").unwrap();
+        let encoder_threads = args.iter().rposition(|arg| arg == "-threads").unwrap();
+        assert!(
+            args[..input]
+                .windows(2)
+                .any(|pair| pair == ["-threads", "3"])
+        );
+        assert!(
+            args[..input]
+                .windows(2)
+                .any(|pair| pair == ["-filter_threads", "3"])
+        );
+        assert_eq!(args[encoder_threads], "-threads");
+        assert_eq!(args[encoder_threads + 1], "3");
     }
 }

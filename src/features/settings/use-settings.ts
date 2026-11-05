@@ -1,6 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ToolsStatus, UpdateResult } from "../../lib/wire-types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ThermalStatus, ToolsStatus, UpdateResult } from "../../lib/wire-types";
+import {
+  persistResourcePreset,
+  type ResourcePreset,
+  readResourcePreset,
+} from "../../lib/resource-preset";
+import {
+  persistThermalGuard,
+  readThermalGuard,
+  unavailableThermalStatus,
+  validateThermalStatus,
+} from "../../lib/thermal-guard";
+
+async function readThermalStatus(): Promise<ThermalStatus> {
+  let timeout = 0;
+  try {
+    const status = await Promise.race([
+      invoke<ThermalStatus>("thermal_status"),
+      new Promise<never>((_, reject) => {
+        timeout = window.setTimeout(() => reject(new Error("Temperature check timed out.")), 2500);
+      }),
+    ]);
+    return validateThermalStatus(status);
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 export function useSettings(open: boolean) {
   const [speakerLabels, setSpeakerLabels] = useState(() => {
@@ -11,6 +37,9 @@ export function useSettings(open: boolean) {
     }
   });
   const speakerLabelsRef = useRef(speakerLabels);
+  const [resourcePreset, setResourcePreset] = useState(readResourcePreset);
+  const [thermalGuardEnabled, setThermalGuardEnabled] = useState(readThermalGuard);
+  const [thermalStatus, setThermalStatus] = useState<ThermalStatus | null>(null);
   const [tools, setTools] = useState<ToolsStatus | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -27,6 +56,39 @@ export function useSettings(open: boolean) {
       // settings still apply for this session
     }
   }, [speakerLabels]);
+
+  useEffect(() => {
+    persistResourcePreset(resourcePreset);
+  }, [resourcePreset]);
+
+  useEffect(() => {
+    persistThermalGuard(thermalGuardEnabled);
+  }, [thermalGuardEnabled]);
+
+  useEffect(() => {
+    if (!open) return;
+    let disposed = false;
+    let checking = false;
+    setThermalStatus(null);
+    const poll = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const status = await readThermalStatus();
+        if (!disposed) setThermalStatus(status);
+      } catch (problem) {
+        if (!disposed) setThermalStatus(unavailableThermalStatus(String(problem)));
+      } finally {
+        checking = false;
+      }
+    };
+    void poll();
+    const interval = window.setInterval(poll, 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [open]);
 
   useEffect(() => {
     let disposed = false;
@@ -103,6 +165,11 @@ export function useSettings(open: boolean) {
 
   return {
     speakerLabels,
+    resourcePreset,
+    setResourcePreset: (preset: ResourcePreset) => setResourcePreset(preset),
+    thermalGuardEnabled,
+    setThermalGuardEnabled,
+    thermalStatus,
     speakerLabelsRef,
     toggleSpeakerLabels,
     tools,

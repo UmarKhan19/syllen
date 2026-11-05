@@ -13,23 +13,37 @@ interface Pending {
   onProgress?: (phase: WhoPhase, fraction: number | null) => void;
 }
 
+export class ThermalGuardError extends Error {
+  constructor() {
+    super("Speaker labeling stopped because the CPU reached the thermal pause limit.");
+    this.name = "ThermalGuardError";
+  }
+}
+
 let worker: Worker | null = null;
+let workerThreads: number | null = null;
 let workerReady = false;
 let blobUrl: string | null = null;
 let nextId = 1;
-const outbox: Array<{ id: number; audio: ArrayBuffer }> = [];
+const outbox: Array<{ id: number; audio: ArrayBuffer; cpuThreads: number }> = [];
 const pending = new Map<number, Pending>();
 
-function rejectAll(message: string) {
-  const error = new Error(message);
+function rejectAll(message: string | Error) {
+  const error = message instanceof Error ? message : new Error(message);
   for (const request of pending.values()) request.reject(error);
   pending.clear();
   outbox.length = 0;
 }
 
+export function abortDiarization(reason: string | Error) {
+  rejectAll(reason);
+  resetWorker();
+}
+
 function resetWorker() {
   worker?.terminate();
   worker = null;
+  workerThreads = null;
   workerReady = false;
   if (blobUrl) {
     URL.revokeObjectURL(blobUrl);
@@ -37,7 +51,7 @@ function resetWorker() {
   }
 }
 
-function send(created: Worker, request: { id: number; audio: ArrayBuffer }) {
+function send(created: Worker, request: { id: number; audio: ArrayBuffer; cpuThreads: number }) {
   const pendingRequest = pending.get(request.id);
   if (!pendingRequest) return;
   try {
@@ -48,8 +62,12 @@ function send(created: Worker, request: { id: number; audio: ArrayBuffer }) {
   }
 }
 
-function getWorker(): Worker {
-  if (worker) return worker;
+function getWorker(cpuThreads: number): Worker {
+  if (worker && workerThreads === cpuThreads) return worker;
+  if (worker) {
+    rejectAll("The speaker worker was replaced for a different thread limit.");
+    resetWorker();
+  }
 
   const moduleUrl = new URL(workerUrl, window.location.href).href;
   // Who's LiteRT loader uses importScripts, which only classic workers have.
@@ -92,6 +110,7 @@ function getWorker(): Worker {
   };
 
   worker = created;
+  workerThreads = cpuThreads;
   return created;
 }
 
@@ -99,8 +118,8 @@ function getWorker(): Worker {
  * Start the worker (and its Wasm compile) before the audio fetch resolves.
  * Safe to call more than once.
  */
-export function warm() {
-  getWorker();
+export function warm(cpuThreads: number) {
+  getWorker(cpuThreads);
 }
 
 /**
@@ -109,24 +128,26 @@ export function warm() {
  */
 export function diarize(
   audio: ArrayBuffer,
+  cpuThreads: number,
   onProgress?: (phase: WhoPhase, fraction: number | null) => void,
 ): Promise<Diarization> {
   return new Promise((resolve, reject) => {
     const id = nextId++;
-    pending.set(id, { resolve, reject, onProgress });
     let created: Worker;
     try {
-      created = getWorker();
+      if (!Number.isSafeInteger(cpuThreads) || cpuThreads < 1)
+        throw new Error("The CPU thread limit must be a positive integer.");
+      created = getWorker(cpuThreads);
     } catch (error) {
-      pending.delete(id);
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
+    pending.set(id, { resolve, reject, onProgress });
     if (!workerReady) {
       // The worker's ESM chunk is still loading; ready replays the outbox.
-      outbox.push({ id, audio });
+      outbox.push({ id, audio, cpuThreads });
       return;
     }
-    send(created, { id, audio });
+    send(created, { id, audio, cpuThreads });
   });
 }

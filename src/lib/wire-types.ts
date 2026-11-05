@@ -20,6 +20,26 @@ export interface TranscriptResult {
   saved: boolean;
 }
 
+export interface JobResult extends TranscriptResult {
+  cpuThreads: number;
+  thermalGuardEnabled: boolean;
+}
+
+export interface ThermalStatus {
+  available: boolean;
+  temperatureC: number | null;
+  pauseAtC: number | null;
+  resumeAtC: number | null;
+  coolDwellSeconds: number;
+  reason: string | null;
+}
+
+export interface ThermalEvent {
+  jobId: string;
+  state: "monitoring" | "cooling" | "unavailable";
+  status: ThermalStatus;
+}
+
 export interface LibraryItem {
   id: string;
   title: string;
