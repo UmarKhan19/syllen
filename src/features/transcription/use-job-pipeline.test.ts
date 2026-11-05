@@ -7,17 +7,27 @@ import { useTranscriptSession } from "../transcript/use-transcript-session";
 const harness = vi.hoisted(() => ({
   effects: [] as Array<() => undefined | (() => void)>,
   states: [] as unknown[],
+  refs: [] as Array<{ current: unknown }>,
+  stateCursor: 0,
+  refCursor: 0,
+  effectCursor: 0,
 }));
 
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,
-  useEffect: (effect: () => undefined | (() => void)) => harness.effects.push(effect),
-  useRef: (current: unknown) => ({ current }),
+  useEffect: (effect: () => undefined | (() => void)) => {
+    harness.effects[harness.effectCursor++] = effect;
+  },
+  useRef: (current: unknown) => {
+    const index = harness.refCursor++;
+    harness.refs[index] ??= { current };
+    return harness.refs[index];
+  },
   useState: (initial: unknown) => {
-    const index = harness.states.length;
-    harness.states.push(initial);
+    const index = harness.stateCursor++;
+    harness.states[index] ??= initial;
     return [
-      initial,
+      harness.states[index],
       (next: unknown) => {
         const current = harness.states[index];
         harness.states[index] =
@@ -42,11 +52,58 @@ vi.mock("./diarization-client", () => ({
 import { diarize } from "./diarization-client";
 import { useJobPipeline } from "./use-job-pipeline";
 
+function listenForResults() {
+  const handlers = new Map<string, (event: { payload: JobResult }) => void>();
+  vi.mocked(listen).mockImplementation(((name: string, handler: (event: never) => void) => {
+    handlers.set(name, handler as (event: { payload: JobResult }) => void);
+    return Promise.resolve(vi.fn());
+  }) as typeof listen);
+  return handlers;
+}
+
+function makeTranscript(jobId: string): JobResult {
+  return {
+    jobId,
+    title: "Interview",
+    duration: 1,
+    audioPath: "/audio.wav",
+    audioUrl: "http://127.0.0.1/audio",
+    waveform: [],
+    text: "hello",
+    words: [{ text: "hello", start: 0, end: 1 }],
+    saved: true,
+    cpuThreads: 2,
+    thermalGuardEnabled: false,
+  };
+}
+
+function stubAudioFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) }),
+  );
+}
+
+function usePipeline(
+  speakerLabelsRef = { current: true },
+  refreshLibrary = vi.fn(),
+  setNotice = vi.fn(),
+) {
+  harness.stateCursor = 0;
+  harness.refCursor = 0;
+  harness.effectCursor = 0;
+  return useJobPipeline(speakerLabelsRef, refreshLibrary, setNotice);
+}
+
 describe("useJobPipeline early errors", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     harness.effects = [];
     harness.states = [];
+    harness.refs = [];
+    harness.stateCursor = 0;
+    harness.refCursor = 0;
+    harness.effectCursor = 0;
     vi.mocked(invoke).mockReset();
     vi.mocked(listen).mockReset();
     vi.mocked(diarize).mockReset();
@@ -313,6 +370,9 @@ describe("useJobPipeline early errors", () => {
     expect(harness.states[7]).toBeNull();
     expect(harness.states[3]).toMatchObject({ text: "world", words: correctedWords });
     expect(harness.states[4]).toMatchObject([{ speaker: 0, text: "world", words: correctedWords }]);
+    expect(harness.states[5]).toBe(true);
+    job.retryWho(correctedTranscript);
+    expect(diarize).toHaveBeenCalledTimes(2);
     expect(invoke).toHaveBeenCalledWith(
       "save_word_corrections",
       expect.objectContaining({
@@ -330,5 +390,156 @@ describe("useJobPipeline early errors", () => {
       speakerCount: 1,
       segments: [expect.objectContaining({ text: "world", speaker: 0, words: correctedWords })],
     });
+  });
+
+  it("keeps the retry seed when Who is cancelled during its analysis save", async () => {
+    const handlers = listenForResults();
+    let resolveFirstSave!: () => void;
+    let saves = 0;
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "start_job") return Promise.resolve({ job_id: "job-1" });
+      if (command === "save_analysis" && ++saves === 1)
+        return new Promise((resolve) => (resolveFirstSave = () => resolve(undefined)));
+      return Promise.resolve();
+    });
+    stubAudioFetch();
+    vi.mocked(diarize).mockResolvedValue({ speakerCount: 1, turns: [] });
+
+    const transcript = makeTranscript("job-1");
+    const speakerLabelsRef = { current: true };
+    const refreshLibrary = vi.fn();
+    const render = () => usePipeline(speakerLabelsRef, refreshLibrary);
+    let job = render();
+    harness.effects[0]?.();
+    await job.start({ path: "/audio.wav" }, "balanced", false);
+    handlers.get("job:result")?.({ payload: transcript });
+    await vi.waitFor(() => expect(saves).toBe(1));
+
+    job = render();
+    expect(harness.states[0]).toBe("who");
+    await job.cancel();
+    expect(harness.states[0]).toBe("done");
+    expect(harness.states[7]).toBe("Speaker analysis cancelled.");
+
+    resolveFirstSave();
+    await vi.waitFor(() => expect(refreshLibrary).toHaveBeenCalledTimes(2));
+    job = render();
+    job.retryWho(transcript);
+    await vi.waitFor(() => expect(diarize).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not let an old Who save clear the seed of a replacement attempt", async () => {
+    const handlers = listenForResults();
+    let resolveFirstSave!: () => void;
+    let resolveReplacementDiarize!: (value: { speakerCount: number; turns: [] }) => void;
+    let saves = 0;
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "start_job") return Promise.resolve({ job_id: "job-1" });
+      if (command === "save_analysis" && ++saves === 1)
+        return new Promise((resolve) => (resolveFirstSave = () => resolve(undefined)));
+      return Promise.resolve();
+    });
+    stubAudioFetch();
+    vi.mocked(diarize)
+      .mockResolvedValueOnce({ speakerCount: 1, turns: [] })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveReplacementDiarize = resolve;
+          }),
+      )
+      .mockResolvedValue({ speakerCount: 1, turns: [] });
+
+    const transcript = makeTranscript("job-1");
+    const refreshLibrary = vi.fn();
+    const render = () => usePipeline({ current: true }, refreshLibrary);
+    let job = render();
+    harness.effects[0]?.();
+    await job.start({ path: "/audio.wav" }, "balanced", false);
+    handlers.get("job:result")?.({ payload: transcript });
+    await vi.waitFor(() => expect(saves).toBe(1));
+
+    job = render();
+    await job.cancel();
+    job = render();
+    job.retryWho(transcript);
+    await vi.waitFor(() => expect(diarize).toHaveBeenCalledTimes(2));
+
+    resolveFirstSave();
+    await vi.waitFor(() => expect(refreshLibrary).toHaveBeenCalledTimes(2));
+    job = render();
+    await job.cancel();
+    resolveReplacementDiarize({ speakerCount: 1, turns: [] });
+    await Promise.resolve();
+    job = render();
+    job.retryWho(transcript);
+    await vi.waitFor(() => expect(diarize).toHaveBeenCalledTimes(3));
+  });
+
+  it("does not let a stale no-label save clear the replacement job's retry seed", async () => {
+    const handlers = listenForResults();
+    let resolveOldSave!: () => void;
+    let resolveWho!: (value: { speakerCount: number; turns: [] }) => void;
+    let jobNumber = 0;
+    let saves = 0;
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "start_job") return Promise.resolve({ job_id: `job-${++jobNumber}` });
+      if (command === "cancel_job") return Promise.resolve();
+      if (command === "save_analysis" && ++saves === 1)
+        return new Promise((resolve) => (resolveOldSave = () => resolve(undefined)));
+      return Promise.resolve();
+    });
+    stubAudioFetch();
+    vi.mocked(diarize).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWho = resolve;
+        }),
+    );
+
+    const speakerLabelsRef = { current: false };
+    const refreshLibrary = vi.fn();
+    const render = () => usePipeline(speakerLabelsRef, refreshLibrary);
+    let job = render();
+    harness.effects[0]?.();
+    await job.start({ path: "/audio.wav" }, "balanced", false);
+    handlers.get("job:result")?.({ payload: makeTranscript("job-1") });
+    await vi.waitFor(() => expect(saves).toBe(1));
+
+    job = render();
+    await job.cancel();
+    speakerLabelsRef.current = true;
+    job = render();
+    await job.start({ path: "/replacement.wav" }, "balanced", false);
+    const replacement = makeTranscript("job-2");
+    handlers.get("job:result")?.({ payload: replacement });
+    await vi.waitFor(() => expect(diarize).toHaveBeenCalledTimes(1));
+
+    resolveOldSave();
+    await vi.waitFor(() => expect(refreshLibrary).toHaveBeenCalledTimes(3));
+    job = render();
+    await job.cancel();
+    resolveWho({ speakerCount: 1, turns: [] });
+    await Promise.resolve();
+    job = render();
+    job.retryWho(replacement);
+    await vi.waitFor(() => expect(diarize).toHaveBeenCalledTimes(2));
+  });
+
+  it("clears the retry seed after a current no-label save completes", async () => {
+    const handlers = listenForResults();
+    vi.mocked(invoke).mockImplementation((command) =>
+      command === "start_job" ? Promise.resolve({ job_id: "job-1" }) : Promise.resolve(),
+    );
+    const transcript = makeTranscript("job-1");
+    const job = usePipeline({ current: false });
+    harness.effects[0]?.();
+    await job.start({ path: "/audio.wav" }, "balanced", false);
+    handlers.get("job:result")?.({ payload: transcript });
+    await vi.waitFor(() => expect(harness.states[0]).toBe("done"));
+
+    expect(harness.states[5]).toBe(true);
+    job.retryWho(transcript);
+    expect(diarize).not.toHaveBeenCalled();
   });
 });

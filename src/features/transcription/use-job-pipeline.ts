@@ -1,6 +1,12 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ResourcePreset } from "../../lib/resource-preset";
+import {
+  unavailableThermalStatus,
+  validateThermalStatus,
+  waitForThermalCooldown,
+} from "../../lib/thermal-guard";
 import { mergeWords, type Segment } from "../../lib/transcript";
 import type {
   JobError,
@@ -10,12 +16,6 @@ import type {
   ThermalStatus,
   TranscriptResult,
 } from "../../lib/wire-types";
-import type { ResourcePreset } from "../../lib/resource-preset";
-import {
-  unavailableThermalStatus,
-  validateThermalStatus,
-  waitForThermalCooldown,
-} from "../../lib/thermal-guard";
 import { abortDiarization, diarize, ThermalGuardError, warm } from "./diarization-client";
 
 type Phase = "idle" | "running" | "who" | "done" | "error";
@@ -318,8 +318,10 @@ export function useJobPipeline(
         setSegments(labelled);
         setSpeakerCount(diarization.speakerCount);
         const saved = await saveSegments(transcript, labelled, diarization.speakerCount);
-        if (isCurrent()) setAnalysisReady(saved);
-        retryTranscript.current = null;
+        if (isCurrent()) {
+          setAnalysisReady(saved);
+          retryTranscript.current = null;
+        }
       } catch (problem) {
         if (!isCurrent()) return;
         if (mine.thermalError) {
@@ -362,8 +364,8 @@ export function useJobPipeline(
         if (generation.current === jobGeneration) {
           setAnalysisReady(saved);
           setPhase("done");
+          retryTranscript.current = null;
         }
-        retryTranscript.current = null;
         return;
       }
       await runWho(transcript, jobGeneration);
