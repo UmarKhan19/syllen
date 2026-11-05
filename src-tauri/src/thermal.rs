@@ -678,6 +678,23 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn wait_for_resumed(pid: u32, timeout: Duration) -> bool {
+        let state_path = format!("/proc/{pid}/stat");
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if fs::read_to_string(&state_path)
+                .ok()
+                .and_then(|stat| stat.split_whitespace().nth(2).map(str::to_string))
+                .is_some_and(|state| state != "T" && state != "Z" && state != "X")
+            {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        false
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn only_known_cpu_sensor_drivers_and_critical_limits_are_accepted() {
         let root = temp_root();
@@ -1134,7 +1151,35 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn cancelled_paused_child_group_is_killed_and_monitor_joins() {
+    fn monitor_cancel_resumes_paused_child_before_monitor_drop() {
+        use std::os::unix::process::CommandExt;
+
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "exec sleep 2"]).process_group(0);
+        let child = TestChild::spawn(&mut command);
+        let pid = child.pid();
+        let cancel = child.control.cancel.clone();
+        let monitor = start_monitor(
+            pid,
+            cancel.clone(),
+            Arc::new(|| fake_available_status(91.0, 105.0)),
+            Arc::new(|_, _| {}),
+            Duration::from_millis(10),
+            Duration::from_millis(30),
+        );
+
+        assert!(wait_for_stopped(pid, Duration::from_secs(2)));
+        cancel.store(true, Ordering::SeqCst);
+        assert!(
+            wait_for_resumed(pid, Duration::from_secs(1)),
+            "monitor cancel did not resume the child before monitor drop"
+        );
+        drop(monitor);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn production_cancel_kills_paused_child_group_and_monitor_joins() {
         use std::os::unix::process::CommandExt;
 
         let mut command = std::process::Command::new("sh");
