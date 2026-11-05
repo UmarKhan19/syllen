@@ -1,8 +1,8 @@
 import type { RefObject } from "react";
 import { useEffect } from "react";
 import { CloseIcon } from "../../icons";
-import type { ThermalStatus, ToolsStatus } from "../../lib/wire-types";
 import type { ResourcePreset } from "../../lib/resource-preset";
+import type { ThermalStatus, ToolsStatus } from "../../lib/wire-types";
 
 const FINE = "text-fine leading-[1.6] text-ink-3";
 const GHOST =
@@ -178,7 +178,7 @@ export function SettingsDrawer({
                 {thermalStatus.coolDwellSeconds}s cool.
               </p>
             ) : (
-              <p className="m-0 mt-1 text-alert">
+              <p className="m-0 mt-1 text-ink-2" role="status" aria-live="off">
                 {thermalStatus?.reason ?? "Checking CPU temperature and supported limits…"}{" "}
                 Automatic thermal protection is unavailable; the job can continue without it.
               </p>
