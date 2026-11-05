@@ -349,19 +349,41 @@ fn read_status_at(hwmon: &Path, cpuinfo: &Path) -> ThermalStatus {
     };
     let identity = fs::read_to_string(cpuinfo).ok();
     let mut readable_temp = None;
+    let mut unavailable_status = None;
+    let mut has_package_sensor = false;
+    let mut candidates = Vec::new();
     for dir in dirs {
         let Ok(name) = fs::read_to_string(dir.join("name")) else {
             continue;
         };
         match name.trim() {
             "coretemp" => {
-                if let Some(status) = read_coretemp(&dir) {
-                    return status;
+                for (temperature, critical, package) in read_coretemp(&dir) {
+                    has_package_sensor |= package;
+                    readable_temp = Some(
+                        readable_temp.map_or(temperature, |current: f64| current.max(temperature)),
+                    );
+                    let Some(limit) = critical else {
+                        unavailable_status = Some(unavailable(
+                            "The CPU driver did not expose a verified critical limit.",
+                            Some(temperature),
+                        ));
+                        continue;
+                    };
+                    let status = available_status(temperature, limit);
+                    if status.available {
+                        candidates.push((status, package));
+                    } else {
+                        unavailable_status = Some(status);
+                    }
                 }
             }
             "k10temp" => {
                 if let Some((temperature, critical)) = read_k10temp(&dir) {
-                    readable_temp = Some(temperature);
+                    has_package_sensor = true;
+                    readable_temp = Some(
+                        readable_temp.map_or(temperature, |current: f64| current.max(temperature)),
+                    );
                     let limit_milli = match critical {
                         Ok(Some(limit)) => Some(limit),
                         Ok(None) => identity
@@ -374,12 +396,30 @@ fn read_status_at(hwmon: &Path, cpuinfo: &Path) -> ThermalStatus {
                         Err(()) => None,
                     };
                     if let Some(limit_milli) = limit_milli {
-                        return available_status(temperature, limit_milli as f64 / 1000.0);
+                        let status = available_status(temperature, limit_milli as f64 / 1000.0);
+                        if status.available {
+                            candidates.push((status, true));
+                        } else {
+                            unavailable_status = Some(status);
+                        }
                     }
                 }
             }
             _ => {}
         }
+    }
+    if let Some((status, _)) = candidates
+        .into_iter()
+        .filter(|(_, package)| !has_package_sensor || *package)
+        .min_by(|(left, _), (right, _)| {
+            (left.pause_at_c.unwrap() - left.temperature_c.unwrap())
+                .total_cmp(&(right.pause_at_c.unwrap() - right.temperature_c.unwrap()))
+        })
+    {
+        return status;
+    }
+    if let Some(status) = unavailable_status {
+        return status;
     }
     unavailable(
         "No supported CPU sensor with a verified thermal limit is available.",
@@ -388,9 +428,12 @@ fn read_status_at(hwmon: &Path, cpuinfo: &Path) -> ThermalStatus {
 }
 
 #[cfg(target_os = "linux")]
-fn read_coretemp(dir: &Path) -> Option<ThermalStatus> {
+fn read_coretemp(dir: &Path) -> Vec<(f64, Option<f64>, bool)> {
     let mut candidates = Vec::new();
-    for entry in fs::read_dir(dir).ok()?.filter_map(Result::ok) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return candidates;
+    };
+    for entry in entries.filter_map(Result::ok) {
         let name = entry.file_name().to_string_lossy().into_owned();
         let Some(index) = name
             .strip_prefix("temp")
@@ -417,20 +460,7 @@ fn read_coretemp(dir: &Path) -> Option<ThermalStatus> {
             label.trim().starts_with("Package id"),
         ));
     }
-    let (temperature, critical, _) = candidates
-        .iter()
-        .filter(|(_, _, package)| *package)
-        .max_by(|a, b| a.0.total_cmp(&b.0))
-        .or_else(|| candidates.iter().max_by(|a, b| a.0.total_cmp(&b.0)))?;
-    Some(critical.map_or_else(
-        || {
-            unavailable(
-                "The CPU driver did not expose a verified critical limit.",
-                Some(*temperature),
-            )
-        },
-        |limit| available_status(*temperature, limit),
-    ))
+    candidates
 }
 
 #[cfg(target_os = "linux")]
@@ -586,6 +616,65 @@ mod tests {
         let status = read_status_at(&root, &cpuinfo);
         assert!(status.available);
         assert_eq!(status.temperature_c, Some(70.0));
+        assert_eq!(status.pause_at_c, Some(85.0));
+        assert_eq!(status.resume_at_c, Some(75.0));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn coretemp_uses_verified_candidate_when_hottest_package_has_no_limit() {
+        let root = temp_root();
+        fs::create_dir_all(&root).unwrap();
+        sensor(
+            &root,
+            "hwmon0",
+            &[
+                ("name", "coretemp\n"),
+                ("temp1_label", "Package id 0\n"),
+                ("temp1_input", "99000\n"),
+                ("temp2_label", "Package id 1\n"),
+                ("temp2_input", "70000\n"),
+                ("temp2_crit", "100000\n"),
+            ],
+        );
+        let cpuinfo = root.join("cpuinfo");
+        fs::write(&cpuinfo, "").unwrap();
+
+        let status = read_status_at(&root, &cpuinfo);
+
+        assert!(status.available);
+        assert_eq!(status.temperature_c, Some(70.0));
+        assert_eq!(status.pause_at_c, Some(85.0));
+        assert_eq!(status.resume_at_c, Some(75.0));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn coretemp_selects_package_with_least_headroom_and_keeps_its_limit() {
+        let root = temp_root();
+        fs::create_dir_all(&root).unwrap();
+        sensor(
+            &root,
+            "hwmon0",
+            &[
+                ("name", "coretemp\n"),
+                ("temp1_label", "Package id 0\n"),
+                ("temp1_input", "94000\n"),
+                ("temp1_crit", "110000\n"),
+                ("temp2_label", "Package id 1\n"),
+                ("temp2_input", "92000\n"),
+                ("temp2_crit", "100000\n"),
+            ],
+        );
+        let cpuinfo = root.join("cpuinfo");
+        fs::write(&cpuinfo, "").unwrap();
+
+        let status = read_status_at(&root, &cpuinfo);
+
+        assert!(status.available);
+        assert_eq!(status.temperature_c, Some(92.0));
         assert_eq!(status.pause_at_c, Some(85.0));
         assert_eq!(status.resume_at_c, Some(75.0));
         fs::remove_dir_all(&root).unwrap();
