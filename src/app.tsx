@@ -108,6 +108,42 @@ export function ThermalUnavailableNotice({
   );
 }
 
+export function RetrySpeakerAnalysis({
+  wordEditing,
+  onRetry,
+}: {
+  wordEditing: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <section
+      className="mt-4.5 flex flex-wrap items-center justify-between gap-3 border-y border-rule py-3 text-meta leading-[1.6] text-ink-2"
+      role="status"
+    >
+      <span>
+        Speaker analysis stopped. The transcript and audio remain available.
+        {wordEditing && (
+          <span id="retry-word-edit-warning">
+            {" "}
+            Save or cancel word corrections before retrying.
+          </span>
+        )}
+      </span>
+      <button
+        type="button"
+        className="inline-flex h-8.5 shrink-0 items-center justify-center rounded-control border border-rule bg-transparent px-3 text-small whitespace-nowrap text-ink-2 transition-colors duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-45"
+        disabled={wordEditing}
+        aria-describedby={wordEditing ? "retry-word-edit-warning" : undefined}
+        onClick={() => {
+          if (!wordEditing) onRetry();
+        }}
+      >
+        Retry speaker analysis
+      </button>
+    </section>
+  );
+}
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<FileSource | null>(null);
@@ -557,19 +593,10 @@ export default function App() {
           <>
             {(job.whoError?.includes("thermal pause limit") ||
               job.whoError === "Speaker analysis cancelled.") && (
-              <section
-                className="mt-4.5 flex flex-wrap items-center justify-between gap-3 border-y border-rule py-3 text-meta leading-[1.6] text-ink-2"
-                role="status"
-              >
-                <span>Speaker analysis stopped. The transcript and audio remain available.</span>
-                <button
-                  type="button"
-                  className="inline-flex h-8.5 shrink-0 items-center justify-center rounded-control border border-rule bg-transparent px-3 text-small whitespace-nowrap text-ink-2 transition-colors duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-                  onClick={() => job.retryWho(job.result)}
-                >
-                  Retry speaker analysis
-                </button>
-              </section>
+              <RetrySpeakerAnalysis
+                wordEditing={wordEditing}
+                onRetry={() => job.retryWho(job.result)}
+              />
             )}
             <TranscriptWorkspace
               result={job.result}
