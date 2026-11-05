@@ -133,17 +133,16 @@ export function diarize(
 ): Promise<Diarization> {
   return new Promise((resolve, reject) => {
     const id = nextId++;
-    pending.set(id, { resolve, reject, onProgress });
     let created: Worker;
     try {
       if (!Number.isSafeInteger(cpuThreads) || cpuThreads < 1)
         throw new Error("The CPU thread limit must be a positive integer.");
       created = getWorker(cpuThreads);
     } catch (error) {
-      pending.delete(id);
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
+    pending.set(id, { resolve, reject, onProgress });
     if (!workerReady) {
       // The worker's ESM chunk is still loading; ready replays the outbox.
       outbox.push({ id, audio, cpuThreads });

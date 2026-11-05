@@ -55,4 +55,45 @@ describe("diarization cancellation", () => {
     await expect(pending).rejects.toBeInstanceOf(ThermalGuardError);
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
+
+  it("replaces a completed worker when the thread limit changes", async () => {
+    const first = diarize(new ArrayBuffer(8), 2);
+    const twoThreadWorker = FakeWorker.instances[0];
+    twoThreadWorker.onmessage?.({ data: { type: "ready" } } as MessageEvent);
+    const firstRequest = twoThreadWorker.postMessage.mock.calls[0][0] as { id: number };
+    twoThreadWorker.onmessage?.({
+      data: { type: "result", id: firstRequest.id, speakerCount: 1, turns: [] },
+    } as MessageEvent);
+    await expect(first).resolves.toEqual({ speakerCount: 1, turns: [] });
+
+    const second = diarize(new ArrayBuffer(8), 4);
+    const fourThreadWorker = FakeWorker.instances[1];
+    expect(twoThreadWorker.terminate).toHaveBeenCalledOnce();
+    fourThreadWorker.onmessage?.({ data: { type: "ready" } } as MessageEvent);
+    expect(fourThreadWorker.postMessage).toHaveBeenCalledOnce();
+    expect(fourThreadWorker.postMessage.mock.calls[0][0]).toMatchObject({ cpuThreads: 4 });
+    const secondRequest = fourThreadWorker.postMessage.mock.calls[0][0] as { id: number };
+    fourThreadWorker.onmessage?.({
+      data: { type: "result", id: secondRequest.id, speakerCount: 1, turns: [] },
+    } as MessageEvent);
+    await expect(second).resolves.toEqual({ speakerCount: 1, turns: [] });
+  });
+
+  it("rejects old requests but keeps the replacement request queued", async () => {
+    const oldRequest = diarize(new ArrayBuffer(8), 2);
+    const twoThreadWorker = FakeWorker.instances[0];
+    const newRequest = diarize(new ArrayBuffer(8), 4);
+    const fourThreadWorker = FakeWorker.instances[1];
+
+    await expect(oldRequest).rejects.toThrow("replaced for a different thread limit");
+    fourThreadWorker.onmessage?.({ data: { type: "ready" } } as MessageEvent);
+    const request = fourThreadWorker.postMessage.mock.calls[0][0] as { id: number };
+    fourThreadWorker.onmessage?.({
+      data: { type: "result", id: request.id, speakerCount: 1, turns: [] },
+    } as MessageEvent);
+
+    await expect(newRequest).resolves.toEqual({ speakerCount: 1, turns: [] });
+    expect(twoThreadWorker.terminate).toHaveBeenCalledOnce();
+    expect(fourThreadWorker.postMessage).toHaveBeenCalledOnce();
+  });
 });
