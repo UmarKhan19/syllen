@@ -166,22 +166,29 @@ export function SettingsDrawer({
             </span>
           </label>
           <div className="mt-3 text-meta leading-[1.6] text-ink-2" aria-live="off">
-            <p className="m-0">
-              CPU temperature:{" "}
-              {thermalStatus?.temperatureC === null || !thermalStatus
-                ? "Unavailable"
-                : `${thermalStatus.temperatureC.toFixed(1)} °C`}
-            </p>
-            {thermalStatus?.available ? (
-              <p className="m-0 mt-1 text-ink-3">
-                Pause at {thermalStatus.pauseAtC} °C · resume at {thermalStatus.resumeAtC} °C after{" "}
-                {thermalStatus.coolDwellSeconds}s cool.
-              </p>
+            {thermalStatus === null ? (
+              <p className="m-0">Checking CPU temperature and supported limits…</p>
             ) : (
-              <p className="m-0 mt-1 text-ink-2" role="status" aria-live="off">
-                {thermalStatus?.reason ?? "Checking CPU temperature and supported limits…"}{" "}
-                Automatic thermal protection is unavailable; the job can continue without it.
-              </p>
+              <>
+                <p className="m-0">
+                  CPU temperature:{" "}
+                  {thermalStatus.temperatureC === null
+                    ? "Unavailable"
+                    : `${thermalStatus.temperatureC.toFixed(1)} °C`}
+                </p>
+                {thermalStatus.available ? (
+                  <p className="m-0 mt-1 text-ink-3">
+                    Pause at {thermalStatus.pauseAtC} °C · resume at {thermalStatus.resumeAtC} °C
+                    after {thermalStatus.coolDwellSeconds}s cool.
+                  </p>
+                ) : (
+                  <p className="m-0 mt-1 text-ink-2" role="status" aria-live="off">
+                    {thermalStatus.reason ??
+                      "CPU temperature or supported limits could not be read."}{" "}
+                    Automatic thermal protection is unavailable; the job can continue without it.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </section>
