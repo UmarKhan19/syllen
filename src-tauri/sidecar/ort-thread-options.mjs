@@ -16,11 +16,15 @@ export function withCpuThreadLimit(ort, threads) {
         get(session, method, sessionReceiver) {
           const original = Reflect.get(session, method, sessionReceiver);
           if (method !== "create" || typeof original !== "function") return original;
-          return (model, options = {}) => Reflect.apply(original, session, [model, {
-            ...options,
-            intraOpNumThreads: threads,
-            interOpNumThreads: 1,
-          }]);
+          return (model, options = {}) =>
+            Reflect.apply(original, session, [
+              model,
+              {
+                ...options,
+                intraOpNumThreads: threads,
+                interOpNumThreads: 1,
+              },
+            ]);
         },
       });
     },
