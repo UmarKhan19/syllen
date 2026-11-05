@@ -11,6 +11,7 @@ Version 0.1.0, tested on Linux. macOS and Windows builds use the same webview AP
 - Waveform playback with click-to-seek. The transcript follows the current passage and word, and following can be turned off.
 - Export as SRT, VTT, or TXT, or copy the transcript to the clipboard.
 - Speaker labeling can be switched off to skip the 32 MB speaker model and the diarization pass.
+- Processing presets limit model and audio-processing threads per engine. Thermal Guard can pause a job's processing children when supported CPU sensors report high temperatures.
 
 ## Requirements
 
@@ -120,7 +121,7 @@ Speaker prefixes are omitted when speaker labeling is off. Caption cues split at
 - **Speaker labeling** turns Who on or off. Off skips the model download and the diarization pass. The setting is stored in the webview's local storage.
 - **yt-dlp** shows the installed version, checks the latest GitHub release, and can download the official standalone binary into the app data folder. The system install is not modified.
 
-Settings apply to the next transcription. They are disabled while a job runs.
+Settings apply to the next job and are disabled while a job runs. Thermal Guard also displays read-only CPU temperature and protection status while Settings is open.
 
 ## Privacy and network
 
@@ -174,7 +175,7 @@ If you redistribute ffmpeg, check the license of the build you ship (LGPL or GPL
 
 ```bash
 npm run build        # tsc typecheck, then vite build
-npm test             # Vitest: shared/feature helper tests and sidecar notice checks
+npm test             # Vitest helpers plus Node checks for hooks, model integrity, and ORT options
 cd src-tauri
 cargo test           # module tests: library, waveform, media server, audio persistence, and file validation
 ```
@@ -183,7 +184,7 @@ Project layout:
 
 ```
 src/                 app.tsx composes features; features/{transcription,library,settings,transcript,playback}/ own UI and hooks
-src/lib/             shared transcript/caption helpers, wire types, byte formatting
+src/lib/             shared transcript/caption helpers, wire types, byte formatting, presets, thermal controls
 src-tauri/src/       lib.rs (setup and command registration), jobs/ (job lifecycle and pipeline),
                      library.rs (SQLite and audio), media-server.rs (loopback server), contracts.rs (wire types)
 src-tauri/sidecar/   Node bridge to Voz

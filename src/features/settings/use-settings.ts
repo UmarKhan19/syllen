@@ -1,13 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ThermalStatus, ToolsStatus, UpdateResult } from "../../lib/wire-types";
-import { persistResourcePreset, type ResourcePreset, readResourcePreset } from "./resource-preset";
+import {
+  persistResourcePreset,
+  type ResourcePreset,
+  readResourcePreset,
+} from "../../lib/resource-preset";
 import {
   persistThermalGuard,
   readThermalGuard,
   unavailableThermalStatus,
   validateThermalStatus,
-} from "./thermal-guard";
+} from "../../lib/thermal-guard";
 
 async function readThermalStatus(): Promise<ThermalStatus> {
   let timeout = 0;

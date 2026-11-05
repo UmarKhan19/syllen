@@ -1,4 +1,4 @@
-import type { ThermalStatus } from "../../lib/wire-types";
+import type { ThermalStatus } from "./wire-types";
 
 export function readThermalGuard(): boolean {
   try {

@@ -10,12 +10,12 @@ import type {
   ThermalStatus,
   TranscriptResult,
 } from "../../lib/wire-types";
-import type { ResourcePreset } from "../settings/resource-preset";
+import type { ResourcePreset } from "../../lib/resource-preset";
 import {
   unavailableThermalStatus,
   validateThermalStatus,
   waitForThermalCooldown,
-} from "../settings/thermal-guard";
+} from "../../lib/thermal-guard";
 import { abortDiarization, diarize, ThermalGuardError, warm } from "./diarization-client";
 
 type Phase = "idle" | "running" | "who" | "done" | "error";

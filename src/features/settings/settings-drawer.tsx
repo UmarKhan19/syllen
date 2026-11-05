@@ -2,7 +2,7 @@ import type { RefObject } from "react";
 import { useEffect } from "react";
 import { CloseIcon } from "../../icons";
 import type { ThermalStatus, ToolsStatus } from "../../lib/wire-types";
-import type { ResourcePreset } from "./resource-preset";
+import type { ResourcePreset } from "../../lib/resource-preset";
 
 const FINE = "text-fine leading-[1.6] text-ink-3";
 const GHOST =

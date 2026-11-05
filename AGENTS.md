@@ -46,8 +46,8 @@ frontend tests, clippy, and Rust tests remain opt-in with `SYLLEN_RUN_PREPUSH=1 
 | `src/icons.tsx` | Shared app icons |
 | `src/lib/transcript.ts`, `captions.ts` | Shared transcript model/merge and caption cue/export helpers |
 | `src/lib/wire-types.ts` | TypeScript mirror of the Rust wire types |
-| `src/lib/format-bytes.ts` | Shared byte-size formatting |
-| `src/lib/format-bytes.test.ts`, `src/lib/transcript.test.ts`, `src/lib/captions.test.ts`, `src/lib/tauri-security-config.test.ts` | Tests for shared helpers and Tauri security configuration |
+| `src/lib/format-bytes.ts`, `resource-preset.ts`, `thermal-guard.ts` | Shared byte formatting, resource presets, and thermal control helpers |
+| `src/lib/format-bytes.test.ts`, `resource-preset.test.ts`, `thermal-guard.test.ts`, `src/lib/transcript.test.ts`, `src/lib/captions.test.ts`, `src/lib/tauri-security-config.test.ts` | Tests for shared helpers and Tauri security configuration |
 | `src/features/transcription/wav.test.ts`, `src/features/library/date-label.test.ts`, `src/features/transcript/word-correction-position.test.ts`, `src/features/transcript/transcript-export.test.ts` | Tests colocated with feature helpers |
 | `src-tauri/src/lib.rs` | App state, Tauri command registration, setup and exit cleanup |
 | `src-tauri/tests/asset-protocol-scope.rs` | Asset protocol glob scope regression test |
@@ -85,8 +85,10 @@ and state. `lib.rs` remains app setup and command registration.
 - Events: `job:progress`, `job:error`, `job:result`, and `job:thermal`. Their payloads are
   `ProgressEvent`, `ErrorEvent`, `JobResult`, and `ThermalEvent` in `contracts.rs`;
   `use-job-pipeline.ts` listens for job events. `start_job` snapshots its optional
-  `thermal_guard_enabled` flag (default `true`); the guard reads supported Linux CPU
+  `thermal_guard_enabled` flag (default `true`); the native guard reads supported Linux CPU
   sensors only while a guarded job is active and pauses only its native child process group.
+  The settings hook separately polls read-only thermal status once per second while its
+  drawer is open, including when no job is running.
 - Chrome geometry is measured, not styled: the popover reads `data-app-topbar` on the
   App header and `data-reading-dock` on the dock, so those attributes must survive any
   markup change.
@@ -110,16 +112,18 @@ and state. `lib.rs` remains app setup and command registration.
 ## Tests
 
 - `npm test` runs Vitest's default `*.test.*` discovery, including helper tests in
-  `src/lib/` and `src/features/` plus `scripts/sidecar-notices.test.mjs`. Export tests
-  assert the IPC payload carries no destination path; config tests pin CSP and asset scope.
+  `src/lib/` and `src/features/`, then Node checks for hooks, model integrity, and ORT thread
+  options. Export tests assert the IPC payload carries no destination path; config tests pin
+  CSP and asset scope.
 - `cargo test` runs Rust tests colocated with their modules: library persistence and
   deletion, waveform peaks and short reads, media byte ranges, media-file validation,
   export filename validation, asset scope glob matches, yt-dlp arguments, thermal sensor
   policy and child-group control, and audio persistence. They use temporary paths and
   harmless child processes, and clean up after themselves.
-- Nothing covers React components, App wiring, Tauri commands end to end, the sidecar
-  protocol, or a full job run. Check those by hand under Xvfb (below) and say what you
-  checked in your report.
+- SSR tests cover selected React output in the settings drawer and transcription controls;
+  hook tests cover job pipeline behavior. App composition, Tauri commands end to end, the
+  sidecar NDJSON protocol, and a full job run are not covered. Check native behavior by
+  hand under Xvfb (below) and say what you checked in your report.
 
 ## Running / testing the app
 
