@@ -138,6 +138,7 @@ export function SettingsDrawer({
                     checked={resourcePreset === value}
                     onChange={() => onResourcePresetChange(value)}
                     className="mt-0.5 accent-ink"
+                    disabled={busy}
                   />
                   <span>
                     <span className="block font-medium text-ink">{label}</span>
@@ -155,6 +156,7 @@ export function SettingsDrawer({
               checked={thermalGuardEnabled}
               onChange={(event) => onThermalGuardChange(event.currentTarget.checked)}
               className="mt-0.5 accent-ink"
+              disabled={busy}
             />
             <span>
               <span className="block font-medium text-ink">Thermal Guard</span>
