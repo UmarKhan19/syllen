@@ -248,9 +248,6 @@ export function useJobPipeline(
           setThermalStatus(initial);
           if (!initial.available) {
             setThermalState("unavailable");
-            setWhoError(
-              `Thermal protection unavailable: ${initial.reason ?? "CPU temperature could not be read."} Continuing without automatic protection.`,
-            );
           } else if (
             initial.temperatureC !== null &&
             initial.pauseAtC !== null &&
@@ -267,10 +264,6 @@ export function useJobPipeline(
             if (!isCurrent()) return;
             setThermalStatus(cool);
             setThermalState(cool.available ? "monitoring" : "unavailable");
-            if (!cool.available)
-              setWhoError(
-                `Thermal protection unavailable: ${cool.reason ?? "CPU temperature could not be read."} Continuing without automatic protection.`,
-              );
           }
         }
 
@@ -281,9 +274,6 @@ export function useJobPipeline(
             setThermalStatus(status);
             if (!status.available) {
               setThermalState("unavailable");
-              setWhoError(
-                `Thermal protection unavailable: ${status.reason ?? "CPU temperature could not be read."} Continuing without automatic protection.`,
-              );
             } else if (
               status.temperatureC !== null &&
               status.pauseAtC !== null &&
@@ -566,12 +556,21 @@ export function useJobPipeline(
     );
   }
 
-  const retryWho = useCallback(() => {
-    const transcript = retryTranscript.current;
-    const active = current.current;
-    if (transcript && active && transcript.jobId === active.id)
-      void runWho(transcript, active.generation);
-  }, [runWho]);
+  const retryWho = useCallback(
+    (latestTranscript: TranscriptResult | null) => {
+      const savedTranscript = retryTranscript.current;
+      const active = current.current;
+      if (savedTranscript && active && savedTranscript.jobId === active.id) {
+        const transcript =
+          latestTranscript?.jobId === savedTranscript.jobId
+            ? { ...savedTranscript, words: latestTranscript.words, text: latestTranscript.text }
+            : savedTranscript;
+        retryTranscript.current = transcript;
+        void runWho(transcript, active.generation);
+      }
+    },
+    [runWho],
+  );
 
   function clearSession() {
     ++generation.current;
@@ -599,6 +598,8 @@ export function useJobPipeline(
     pendingErrors.current.clear();
     retryTranscript.current = null;
     abortAttempt();
+    setThermalStatus(null);
+    setThermalState("monitoring");
     setResult(transcript);
     setSegments(nextSegments);
     setAnalysisReady(true);

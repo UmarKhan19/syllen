@@ -19,7 +19,7 @@ import { AlertIcon, LibraryIcon } from "./icons";
 import { formatClock, toTxt } from "./lib/captions";
 import { formatBytes } from "./lib/format-bytes";
 import { mergeWords } from "./lib/transcript";
-import type { FileInfo, LibraryItem } from "./lib/wire-types";
+import type { FileInfo, LibraryItem, ThermalStatus } from "./lib/wire-types";
 
 type FileSource = { path: string; name: string; size: number };
 const STEPS_URL = [
@@ -81,6 +81,33 @@ const ALERT =
 function normalizeUrl(value: string) {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
 }
+
+export function ThermalUnavailableNotice({
+  phase,
+  hasResult,
+  thermalState,
+  status,
+}: {
+  phase: string;
+  hasResult: boolean;
+  thermalState: "monitoring" | "cooling" | "unavailable";
+  status: ThermalStatus | null;
+}) {
+  if (
+    thermalState !== "unavailable" ||
+    (phase !== "running" && phase !== "who" && !(phase === "done" && hasResult))
+  )
+    return null;
+
+  return (
+    <p className="mt-2 m-0 text-meta leading-[1.6] text-ink-2" role="status" aria-live="polite">
+      Thermal protection unavailable:{" "}
+      {status?.reason ?? "CPU temperature or limits could not be read."} Continuing without
+      automatic protection.
+    </p>
+  );
+}
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<FileSource | null>(null);
@@ -504,17 +531,12 @@ export default function App() {
             {job.thermalStatus?.coolDwellSeconds}s.
           </p>
         )}
-        {job.phase === "running" && job.thermalState === "unavailable" && (
-          <p
-            className="mt-2 m-0 text-meta leading-[1.6] text-alert"
-            role="status"
-            aria-live="polite"
-          >
-            Thermal protection unavailable:{" "}
-            {job.thermalStatus?.reason ?? "CPU temperature or limits could not be read."} Continuing
-            without automatic protection.
-          </p>
-        )}
+        <ThermalUnavailableNotice
+          phase={job.phase}
+          hasResult={Boolean(job.result)}
+          thermalState={job.thermalState}
+          status={job.thermalStatus}
+        />
         {job.error && (
           <section className={ALERT} role="alert">
             <AlertIcon />
@@ -543,7 +565,7 @@ export default function App() {
                 <button
                   type="button"
                   className="inline-flex h-8.5 shrink-0 items-center justify-center rounded-control border border-rule bg-transparent px-3 text-small whitespace-nowrap text-ink-2 transition-colors duration-150 ease-[ease] hover:border-rule-strong hover:bg-sheet hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-                  onClick={job.retryWho}
+                  onClick={() => job.retryWho(job.result)}
                 >
                   Retry speaker analysis
                 </button>
