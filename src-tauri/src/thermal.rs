@@ -205,26 +205,23 @@ fn monitor_loop(
     poll: Duration,
     dwell: Duration,
 ) {
-    let mut paused = false;
+    let mut paused_group = PausedChildGroup::new(pid);
     let mut cooldown = Cooldown::default();
     loop {
         if cancel.load(Ordering::SeqCst) {
-            if paused && !resume_group(pid) {
-                terminate_group(pid);
+            if paused_group.paused && !paused_group.resume() {
+                paused_group.terminate();
             }
             return;
         }
         let mut status = read();
         if !status.available {
-            if paused {
-                if !resume_group(pid) {
-                    terminate_group(pid);
-                }
-                paused = false;
+            if paused_group.paused && !paused_group.resume() {
+                paused_group.terminate();
             }
             cooldown = Cooldown::default();
             emit(ThermalState::Unavailable, status);
-        } else if paused {
+        } else if paused_group.paused {
             let temperature = status.temperature_c.unwrap_or(f64::INFINITY);
             if temperature <= status.resume_at_c.unwrap_or(f64::NEG_INFINITY) {
                 if cooldown.update(
@@ -233,13 +230,12 @@ fn monitor_loop(
                     Instant::now(),
                     dwell,
                 ) {
-                    if resume_group(pid) {
-                        paused = false;
+                    if paused_group.resume() {
                         cooldown = Cooldown::default();
                         emit(ThermalState::Monitoring, status);
                     } else {
                         status = signal_failure(status, "resume");
-                        terminate_group(pid);
+                        paused_group.terminate();
                         emit(ThermalState::Unavailable, status);
                         return;
                     }
@@ -258,8 +254,7 @@ fn monitor_loop(
         } else if status.temperature_c.unwrap_or(f64::NEG_INFINITY)
             >= status.pause_at_c.unwrap_or(f64::INFINITY)
         {
-            if pause_group(pid) {
-                paused = true;
+            if paused_group.pause() {
                 cooldown = Cooldown::default();
                 emit(ThermalState::Cooling, status);
             } else {
@@ -271,12 +266,54 @@ fn monitor_loop(
         }
         match wake.recv_timeout(poll) {
             Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                if paused && !resume_group(pid) {
-                    terminate_group(pid);
+                if paused_group.paused && !paused_group.resume() {
+                    paused_group.terminate();
                 }
                 return;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
+struct PausedChildGroup {
+    pid: u32,
+    paused: bool,
+}
+
+impl PausedChildGroup {
+    fn new(pid: u32) -> Self {
+        Self { pid, paused: false }
+    }
+
+    fn pause(&mut self) -> bool {
+        if pause_group(self.pid) {
+            self.paused = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn resume(&mut self) -> bool {
+        if resume_group(self.pid) {
+            self.paused = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn terminate(&mut self) {
+        terminate_group(self.pid);
+        self.paused = false;
+    }
+}
+
+impl Drop for PausedChildGroup {
+    fn drop(&mut self) {
+        if self.paused && (thread::panicking() || !resume_group(self.pid)) {
+            terminate_group(self.pid);
         }
     }
 }
@@ -574,6 +611,73 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    struct TestChild {
+        control: JobControl,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl TestChild {
+        fn spawn(command: &mut std::process::Command) -> Self {
+            let control = JobControl::default();
+            *control.child.lock().unwrap() = Some(command.spawn().unwrap());
+            Self { control }
+        }
+
+        fn pid(&self) -> u32 {
+            self.control.child.lock().unwrap().as_ref().unwrap().id()
+        }
+
+        fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+            self.control
+                .child
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .try_wait()
+        }
+
+        fn wait(&mut self) -> std::process::ExitStatus {
+            self.control
+                .child
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap()
+                .wait()
+                .unwrap()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            crate::process::kill_current(&self.control);
+            if let Some(mut child) = self.control.child.lock().unwrap().take() {
+                let _ = child.wait();
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn wait_for_stopped(pid: u32, timeout: Duration) -> bool {
+        let state_path = format!("/proc/{pid}/stat");
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if fs::read_to_string(&state_path)
+                .ok()
+                .and_then(|stat| stat.split_whitespace().nth(2).map(str::to_string))
+                .as_deref()
+                == Some("T")
+            {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        false
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn only_known_cpu_sensor_drivers_and_critical_limits_are_accepted() {
         let root = temp_root();
@@ -789,6 +893,45 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn monitor_panic_after_stopping_child_terminates_its_group() {
+        use std::os::unix::process::CommandExt;
+
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "exec sleep 30"]).process_group(0);
+        let mut child = TestChild::spawn(&mut command);
+        let pid = child.pid();
+        let monitor = start_monitor(
+            pid,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(|| fake_available_status(91.0, 105.0)),
+            Arc::new(move |state, _| {
+                if matches!(state, ThermalState::Cooling) {
+                    assert!(wait_for_stopped(pid, Duration::from_secs(1)));
+                    panic!("injected monitor panic after SIGSTOP");
+                }
+            }),
+            Duration::from_millis(5),
+            Duration::from_millis(30),
+        );
+
+        drop(monitor);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "child remained stopped after monitor panic"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+        assert!(!status.success());
+        assert!(!child.wait().success());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn monitor_stops_and_resumes_only_its_harmless_child_group() {
         use std::os::unix::process::CommandExt;
 
@@ -996,9 +1139,9 @@ mod tests {
 
         let mut command = std::process::Command::new("sh");
         command.args(["-c", "exec sleep 30"]).process_group(0);
-        let mut child = command.spawn().unwrap();
-        let pid = child.id();
-        let cancel = Arc::new(AtomicBool::new(false));
+        let mut child = TestChild::spawn(&mut command);
+        let pid = child.pid();
+        let cancel = child.control.cancel.clone();
         let monitor = start_monitor(
             pid,
             cancel.clone(),
@@ -1007,28 +1150,22 @@ mod tests {
             Duration::from_secs(1),
             Duration::from_secs(15),
         );
-        let state_path = format!("/proc/{pid}/stat");
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while Instant::now() < deadline {
-            if fs::read_to_string(&state_path)
-                .ok()
-                .and_then(|stat| stat.split_whitespace().nth(2).map(str::to_string))
-                .is_some_and(|state| state == "T")
-            {
-                break;
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-        assert_eq!(
-            fs::read_to_string(&state_path)
-                .unwrap()
-                .split_whitespace()
-                .nth(2),
-            Some("T")
-        );
-        unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        assert!(wait_for_stopped(pid, Duration::from_secs(2)));
         cancel.store(true, Ordering::SeqCst);
+        crate::process::kill_current(&child.control);
         drop(monitor);
-        assert!(!child.wait().unwrap().success());
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "cancelled child group remained alive"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+        assert!(!status.success());
+        assert!(!child.wait().success());
     }
 }
