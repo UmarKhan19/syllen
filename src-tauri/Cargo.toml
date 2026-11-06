@@ -19,9 +19,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 http-range = "0.1"
-getrandom = "0.3"
+getrandom = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["default-tls", "charset"] }
-sha2 = "0.10"
+sha2 = "0.11"
 anyhow = "1"
 # Sequoia's OpenSSL backend avoids CNG's cx448/crypto-bigint path on Windows too.
 # Vendoring avoids a system OpenSSL runtime dependency on every desktop target.
