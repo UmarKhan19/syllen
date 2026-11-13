@@ -23,25 +23,25 @@
     "tauri:build": "npm run sidecar:prepare && tauri build"
   },
   "dependencies": {
-    "@desert-ant-labs/who": "^4.2.0",
+    "@desert-ant-labs/who": "^4.3.0",
     "@litertjs/core": "^2.6.0",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
-    "@tailwindcss/vite": "^4.3.3",
+    "@biomejs/biome": "^2.6.6",
+    "@tailwindcss/vite": "^4.3.5",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.3.0",
     "husky": "^9.1.7",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
-    "vite": "^8.0.16",
-    "vitest": "^5.0.5"
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
   },
   "description": "Local video and audio transcription with speaker labels",
   "license": "MIT"
